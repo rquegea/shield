@@ -36,20 +36,6 @@ module.exports = (env, argv) => ({
   },
   resolve: {
     extensions: ['.ts', '.js'],
-    fallback: {
-      canvas: false,
-      fs: false,
-      http: false,
-      https: false,
-      url: false,
-      zlib: false,
-      stream: false,
-      util: false,
-      assert: false,
-    },
-  },
-  externals: {
-    canvas: 'commonjs canvas',
   },
   plugins: [
     new CopyPlugin({

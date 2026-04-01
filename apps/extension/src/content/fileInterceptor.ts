@@ -58,83 +58,61 @@ function readFileAsText(file: File): Promise<string> {
   })
 }
 
-async function readPdfAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+function extractPdfText(file: File): Promise<string> {
+  return new Promise((resolve) => {
     const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      // Los PDFs tienen texto entre paréntesis seguido de Tj o TJ
+      const results: string[] = []
 
-    // Timeout de 5 segundos para no bloquear UI
-    const timeoutId = setTimeout(() => {
-      console.warn('[ShieldAI] Timeout en extracción de PDF, usando fallback')
-      reject(new Error('PDF extraction timeout'))
-    }, 5000)
+      // Buscar texto en operadores Tj
+      const regex1 = /\(([^)]{1,500})\)\s*Tj/g
+      let match
+      while ((match = regex1.exec(text)) !== null) {
+        results.push(match[1])
+      }
 
-    reader.onload = async () => {
-      try {
-        const arrayBuffer = reader.result
-        if (!(arrayBuffer instanceof ArrayBuffer)) {
-          clearTimeout(timeoutId)
-          reject(new Error('FileReader returned non-ArrayBuffer'))
-          return
-        }
-
-        // Import dinámico de pdfjs
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.js')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-
-        // Cargar el PDF con pdfjs usando Uint8Array
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) })
-        const pdf = await loadingTask.promise
-        const texts: string[] = []
-
-        // Limitar a primeras 20 páginas (optimización para PDFs grandes)
-        const maxPages = Math.min(pdf.numPages, 20)
-        console.log(`[ShieldAI] Extrayendo de ${maxPages}/${pdf.numPages} páginas`)
-
-        // Extraer texto de cada página
-        for (let i = 1; i <= maxPages; i++) {
-          const page = await pdf.getPage(i)
-          const content = await page.getTextContent()
-          const pageText = content.items
-            .filter((item: any) => 'str' in item)
-            .map((item: any) => item.str)
-            .join(' ')
-          texts.push(pageText)
-        }
-
-        clearTimeout(timeoutId)
-        const extractedText = texts.join('\n')
-        console.log(`[ShieldAI] Texto extraído del PDF: ${extractedText.length} caracteres`)
-        resolve(extractedText)
-      } catch (err) {
-        console.warn('[ShieldAI] Error parseando PDF con pdfjs:', err)
-        // Si falla la extracción con pdfjs, intentar extracción simple
-        try {
-          const arrayBuffer = reader.result
-          if (!(arrayBuffer instanceof ArrayBuffer)) {
-            clearTimeout(timeoutId)
-            reject(new Error('FileReader returned non-ArrayBuffer'))
-            return
+      // Buscar texto en arrays TJ
+      const regex2 = /\[([^\]]*)\]\s*TJ/gi
+      while ((match = regex2.exec(text)) !== null) {
+        const innerStrings = match[1].match(/\(([^)]+)\)/g)
+        if (innerStrings) {
+          for (const s of innerStrings) {
+            results.push(s.slice(1, -1))
           }
-          const bytes = new Uint8Array(arrayBuffer)
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-          // Extraer strings legibles entre paréntesis (formato PDF para texto)
-          const matches = text.match(/\(([^)]{2,})\)/g) || []
-          const fallbackText = matches.map((m) => m.slice(1, -1)).join(' ')
-          clearTimeout(timeoutId)
-          console.log(`[ShieldAI] Fallback extraction del PDF: ${fallbackText.length} caracteres`)
-          resolve(fallbackText)
-        } catch (fallbackErr) {
-          clearTimeout(timeoutId)
-          console.warn('[ShieldAI] Fallback extraction también falló:', fallbackErr)
-          reject(fallbackErr)
         }
       }
+
+      // También buscar texto plano después de "stream" y antes de "endstream"
+      // Algunos PDFs tienen texto sin comprimir en streams
+      const streamRegex = /stream\r?\n([\s\S]*?)endstream/g
+      while ((match = streamRegex.exec(text)) !== null) {
+        const streamText = match[1]
+        // Extraer texto de operadores BT...ET
+        const btRegex = /BT\s([\s\S]*?)ET/g
+        let btMatch
+        while ((btMatch = btRegex.exec(streamText)) !== null) {
+          const innerText = btMatch[1]
+          const tjInner = innerText.match(/\(([^)]+)\)/g)
+          if (tjInner) {
+            for (const s of tjInner) {
+              results.push(s.slice(1, -1))
+            }
+          }
+        }
+      }
+
+      const extracted = results.join(' ')
+      console.log('[ShieldAI] PDF texto extraído:', extracted.length, 'caracteres')
+      console.log('[ShieldAI] PDF muestra:', extracted.substring(0, 300))
+      resolve(extracted)
     }
     reader.onerror = () => {
-      clearTimeout(timeoutId)
-      reject(reader.error)
+      console.warn('[ShieldAI] Error leyendo PDF')
+      resolve('')
     }
-    reader.readAsArrayBuffer(file)
+    reader.readAsBinaryString(file)
   })
 }
 
@@ -254,7 +232,7 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
     let content = ''
 
     if (fileType === 'pdf') {
-      content = await readPdfAsText(file)
+      content = await extractPdfText(file)
       // Si el PDF está vacío después de intentar leerlo, mostrar warning genérico
       if (!content.trim()) {
         console.log('[ShieldAI] No se pudo extraer texto del PDF, mostrando warning genérico')

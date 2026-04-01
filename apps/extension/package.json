@@ -9,7 +9,7 @@
   "dependencies": {
     "@shieldai/detectors": "*",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^3.11.174"
+    "pdfjs-dist": "^5.6.205"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.38",

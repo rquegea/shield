@@ -29,7 +29,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 10 http://localhost:3000/login)",
       "Bash(curl -s --max-time 10 http://localhost:3000/login)",
       "Bash(curl:*)",
-      "Bash(lsof -i:3000)"
+      "Bash(lsof -i:3000)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }
