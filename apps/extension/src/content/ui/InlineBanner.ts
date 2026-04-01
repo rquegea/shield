@@ -150,7 +150,21 @@ const BANNER_STYLES = /* css */ `
 const BLOCK_STYLE_ID = 'shieldai-block-buttons'
 
 function getFormContainer(input: HTMLElement): HTMLElement | null {
-  return input.closest('form') ?? input.parentElement
+  // Primero intentar con <form>
+  const form = input.closest('form')
+  if (form) return form
+
+  // Si no hay form, subir hasta 10 niveles buscando un contenedor que tenga button o [role="button"]
+  let container = input.parentElement
+  for (let i = 0; i < 10; i++) {
+    if (!container) break
+    const hasButton = container.querySelector('button') || container.querySelector('[role="button"]')
+    if (hasButton) return container
+    container = container.parentElement
+  }
+
+  // Fallback: parent del input
+  return input.parentElement
 }
 
 function injectBlockStyle(input: HTMLElement): void {
@@ -167,7 +181,8 @@ function injectBlockStyle(input: HTMLElement): void {
   style.id = BLOCK_STYLE_ID
   style.textContent = `
     [data-shieldai-blocked="1"] button,
-    [data-shieldai-blocked="1"] [role="button"] {
+    [data-shieldai-blocked="1"] [role="button"],
+    [data-shieldai-blocked="1"] [jsaction*="click"] {
       opacity: 0.4 !important;
       pointer-events: none !important;
       filter: grayscale(0.5) !important;
@@ -265,7 +280,7 @@ export function updateBanner(
   banner.innerHTML = `
     <span class="icon">${shieldSvg(colors.icon)}</span>
     <span class="content">
-      <span class="text">ShieldAI detectó: </span>
+      <span class="text">Guripa AI detectó: </span>
       <span class="details">${parts.join(', ')}</span>
     </span>
   `

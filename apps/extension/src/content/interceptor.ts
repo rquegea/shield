@@ -185,7 +185,7 @@ function getInputElement(): HTMLElement | null {
   // Fallback: búsqueda genérica
   const fallback = findInputElementFallback()
   if (fallback) {
-    console.log('[ShieldAI] Input encontrado por fallback genérico:', fallback.tagName)
+    console.log('[Guripa AI] Input encontrado por fallback genérico:', fallback.tagName)
     return fallback
   }
 
@@ -315,7 +315,7 @@ function clickSubmitButton(): void {
 function handleAcceptRisk(): void {
   if (!lastScanResult?.hasMatches || !config) return
 
-  console.log('[ShieldAI] Usuario aceptó el riesgo, desbloqueando...')
+  console.log('[Guripa AI] Usuario aceptó el riesgo, desbloqueando...')
 
   // Registrar el evento
   if (config.policyMode === 'warn') {
@@ -331,7 +331,7 @@ function handleAcceptRisk(): void {
 
   // Dar un tick para que el CSS se aplique y los botones se reactiven
   requestAnimationFrame(() => {
-    console.log('[ShieldAI] Haciendo click en el botón de submit...')
+    console.log('[Guripa AI] Haciendo click en el botón de submit...')
     clickSubmitButton()
   })
 }
@@ -362,20 +362,20 @@ function runRealtimeScan(): void {
   if (!result.hasMatches) {
     removeBanner()
     isBlocked = false
-    console.log('[ShieldAI] Sin detecciones, desbloqueado')
+    console.log('[Guripa AI] Sin detecciones, desbloqueado')
     return
   }
 
   // ─── Modo monitor: solo registrar, no bloquear ───
   if (config?.policyMode === 'monitor') {
     // No mostrar banner ni bloquear botones
-    console.log('[ShieldAI] Modo monitor: solo registrar')
+    console.log('[Guripa AI] Modo monitor: solo registrar')
     return
   }
 
   // ─── Modo block y warn: bloquear el envío ───
   isBlocked = true
-  console.log('[ShieldAI] ⚠️ BLOQUEADO - Datos sensibles detectados:', result.summary)
+  console.log('[Guripa AI] ⚠️ BLOQUEADO - Datos sensibles detectados:', result.summary)
 
   // ─── Modo block: banner sin botón de aceptar, botones deshabilitados ───
   // ─── Modo warn: banner con botón "Enviar de todos modos" ───
@@ -438,12 +438,29 @@ function handleDropEvent(event: Event): void {
 }
 
 function isInBanner(element: HTMLElement): boolean {
-  // Verificar si el elemento está dentro del banner de ShieldAI
+  // Verificar si el elemento está dentro del banner de Guripa AI
   let el: HTMLElement | null = element
   while (el) {
     if (el.tagName === 'SHIELDAI-BANNER') return true
     el = el.parentElement
   }
+  return false
+}
+
+function isNearInput(element: HTMLElement): boolean {
+  // Comprobar si el elemento clickeado está dentro del mismo contenedor que el input
+  const input = getInputElement()
+  if (!input) return false
+
+  // Subir hasta 8 niveles del elemento clickeado buscando un contenedor
+  let container = element.parentElement
+  for (let i = 0; i < 8; i++) {
+    if (!container) break
+    // Si encontramos el input o un ancestro del input, está "cerca"
+    if (container.contains(input) || container === input) return true
+    container = container.parentElement
+  }
+
   return false
 }
 
@@ -458,18 +475,18 @@ function handleClickEvent(event: Event): void {
   if (isInBanner(target)) return
 
   // Buscar si el click está en un botón (o dentro de uno)
-  const button = target.closest('button') || target.closest('[role="button"]')
+  // Incluir [jsaction] para Gemini y otras plataformas
+  const button = target.closest('button') ||
+                 target.closest('[role="button"]') ||
+                 target.closest('[jsaction]')
 
-  if (button) {
-    console.log('[ShieldAI] ⛔ BLOQUEANDO click en botón:', button.textContent?.slice(0, 50))
+  if (button && isNearInput(button)) {
+    console.log('[Guripa AI] ⛔ BLOQUEANDO click en botón:', button.textContent?.slice(0, 50))
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
     return
   }
-
-  // Si no es botón pero está bloqueado, podrías querer bloquear también otros clicks
-  // que podrían disparar el envío (como divs con listeners de click)
 }
 
 function handleKeydownEvent(event: KeyboardEvent): void {
@@ -486,14 +503,14 @@ function handleKeydownEvent(event: KeyboardEvent): void {
                   target.getAttribute('contenteditable') === 'true' ||
                   target.getAttribute('role') === 'textbox'
 
-  // Prevenir Enter en inputs cuando está bloqueado
+  // Prevenir TODO Enter excepto Shift+Enter (que es para nueva línea)
   if (isInput && (event.key === 'Enter' || event.keyCode === 13)) {
-    // Ctrl+Enter o Cmd+Enter normalmente envía
-    if (event.ctrlKey || event.metaKey) {
+    // Permitir Shift+Enter para nueva línea
+    if (!event.shiftKey) {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      console.log('[ShieldAI] Enter bloqueado — esperando aprobación del usuario')
+      console.log('[Guripa AI] Enter bloqueado — esperando aprobación del usuario')
     }
   }
 }
@@ -506,7 +523,7 @@ function handleSubmitEvent(event: Event): void {
   event.preventDefault()
   event.stopPropagation()
   event.stopImmediatePropagation()
-  console.log('[ShieldAI] Submit bloqueado — esperando aprobación del usuario')
+  console.log('[Guripa AI] Submit bloqueado — esperando aprobación del usuario')
 }
 
 function startPolling(): void {
@@ -529,7 +546,87 @@ function attachAllListeners(): void {
   document.addEventListener('keydown', handleKeydownEvent, { capture: true })
   document.addEventListener('submit', handleSubmitEvent, { capture: true })
   startPolling()
-  console.log('[ShieldAI] Listeners registrados (input, paste, drop, click, keydown, submit, polling)')
+  console.log('[Guripa AI] Listeners registrados (input, paste, drop, click, keydown, submit, polling)')
+}
+
+// ============================================================================
+// Interceptores de fetch() y XMLHttpRequest (última línea de defensa)
+// ============================================================================
+
+function isChatsendUrl(url: string): boolean {
+  // URLs de chat por plataforma
+  const chatPatterns = [
+    /\/backend-api\/conversation/, // ChatGPT
+    /\/batchexecute/, // Gemini
+    /\/api\/.*\/chat/, // Claude
+    /\/api\/ask/, // Perplexity
+    /\/turing\/conversation/, // Copilot
+  ]
+  return chatPatterns.some((pattern) => pattern.test(url))
+}
+
+function interceptFetch(): void {
+  const originalFetch = window.fetch
+
+  window.fetch = function (this: any, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    if (!isBlocked) {
+      return originalFetch.apply(this, arguments as any)
+    }
+
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as any).url ?? ''
+    const method = (init?.method ?? 'GET').toUpperCase()
+
+    if ((method === 'POST' || method === 'PUT') && isChatsendUrl(url)) {
+      console.log('[Guripa AI] ⛔ BLOQUEANDO fetch POST/PUT a:', url)
+      if (lastScanResult?.hasMatches) {
+        sendEvent(buildPayload(lastScanResult, 'blocked', false))
+      }
+
+      // Retornar un response fake 403
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'Blocked by Guripa AI' }), {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+
+    return originalFetch.apply(this, arguments as any)
+  } as any
+}
+
+function interceptXHR(): void {
+  const originalOpen = XMLHttpRequest.prototype.open
+
+  XMLHttpRequest.prototype.open = function (
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    async?: boolean,
+    username?: string | null,
+    password?: string | null,
+  ): void {
+    if (isBlocked && (method === 'POST' || method === 'PUT') && isChatsendUrl(url.toString())) {
+      console.log('[Guripa AI] ⛔ BLOQUEANDO XMLHttpRequest', method, 'a:', url)
+
+      // Sobrescribir el método send para no hacer nada
+      const originalSend = this.send
+      this.send = function (): void {
+        if (lastScanResult?.hasMatches) {
+          sendEvent(buildPayload(lastScanResult, 'blocked', false))
+        }
+        // Simular error 403
+        ;(this as any).status = 403
+        ;(this as any).statusText = 'Forbidden'
+        ;(this as any).responseText = JSON.stringify({ error: 'Blocked by Guripa AI' })
+        if (this.onreadystatechange) this.onreadystatechange(new Event('readystatechange'))
+      }
+      return
+    }
+
+    return originalOpen.apply(this, [method, url, async ?? true, username, password])
+  }
 }
 
 // ============================================================================
@@ -544,9 +641,9 @@ function startObserver(): void {
     const found = input !== null
 
     if (found && !lastInputFound) {
-      console.log('[ShieldAI] Input encontrado:', input?.tagName, input?.id || input?.className)
+      console.log('[Guripa AI] Input encontrado:', input?.tagName, input?.id || input?.className)
     } else if (!found && lastInputFound) {
-      console.log('[ShieldAI] Input perdido (navegación SPA)')
+      console.log('[Guripa AI] Input perdido (navegación SPA)')
       removeBanner()
       lastScanResult = null
       lastPolledText = ''
@@ -578,7 +675,7 @@ async function init(): Promise<void> {
   platform = detectPlatform()
 
   if (platform === 'unknown') {
-    console.log('[ShieldAI] Plataforma desconocida, no se inicializa')
+    console.log('[Guripa AI] Plataforma desconocida, no se inicializa')
     return
   }
 
@@ -587,12 +684,12 @@ async function init(): Promise<void> {
       chrome.runtime.sendMessage({ type: 'GET_CONFIG' }, resolve)
     })
   } catch {
-    console.warn('[ShieldAI] No se pudo obtener la configuración')
+    console.warn('[Guripa AI] No se pudo obtener la configuración')
     return
   }
 
   if (!config?.enabled) {
-    console.log('[ShieldAI] Extensión desactivada')
+    console.log('[Guripa AI] Extensión desactivada')
     return
   }
 
@@ -607,16 +704,18 @@ async function init(): Promise<void> {
 
   if (!selectors) {
     selectors = PLATFORM_FALLBACK_SELECTORS[platform] ?? null
-    if (selectors) console.log(`[ShieldAI] Usando selectores de fallback para ${platform}`)
+    if (selectors) console.log(`[Guripa AI] Usando selectores de fallback para ${platform}`)
   }
 
   attachAllListeners()
   startObserver()
+  interceptFetch()
+  interceptXHR()
 
   // Inicializar file interceptor
   await initFileInterceptor(config, platform)
 
-  console.log('[ShieldAI] Interceptor activo en', platform)
+  console.log('[Guripa AI] Interceptor activo en', platform)
 }
 
 init()
