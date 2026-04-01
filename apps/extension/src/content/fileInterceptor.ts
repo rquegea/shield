@@ -104,12 +104,12 @@ function extractPdfText(file: File): Promise<string> {
       }
 
       const extracted = results.join(' ')
-      console.log('[ShieldAI] PDF texto extraído:', extracted.length, 'caracteres')
-      console.log('[ShieldAI] PDF muestra:', extracted.substring(0, 300))
+      console.log('[Guripa AI] PDF texto extraído:', extracted.length, 'caracteres')
+      console.log('[Guripa AI] PDF muestra:', extracted.substring(0, 300))
       resolve(extracted)
     }
     reader.onerror = () => {
-      console.warn('[ShieldAI] Error leyendo PDF')
+      console.warn('[Guripa AI] Error leyendo PDF')
       resolve('')
     }
     reader.readAsBinaryString(file)
@@ -134,7 +134,7 @@ async function readDocxAsText(file: File): Promise<string> {
         // Extraer word/document.xml
         const documentXml = zip.file('word/document.xml')
         if (!documentXml) {
-          console.log('[ShieldAI] No se encontró word/document.xml en el .docx')
+          console.log('[Guripa AI] No se encontró word/document.xml en el .docx')
           resolve('')
           return
         }
@@ -157,10 +157,10 @@ async function readDocxAsText(file: File): Promise<string> {
         }
 
         const extractedText = textParts.join(' ')
-        console.log(`[ShieldAI] Texto extraído del .docx: ${extractedText.length} caracteres`)
+        console.log(`[Guripa AI] Texto extraído del .docx: ${extractedText.length} caracteres`)
         resolve(extractedText)
       } catch (err) {
-        console.warn('[ShieldAI] Error descomprimiendo/parseando .docx:', err)
+        console.warn('[Guripa AI] Error descomprimiendo/parseando .docx:', err)
         reject(err)
       }
     }
@@ -211,11 +211,11 @@ function buildPayload(
 async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
   const fileType = getFileType(file.name)
 
-  console.log(`[ShieldAI] Analizando archivo: ${file.name} (${fileType})`)
+  console.log(`[Guripa AI] Analizando archivo: ${file.name} (${fileType})`)
 
   // Archivos que no podemos leer: warning genérico
   if (fileType === 'excel') {
-    console.log(`[ShieldAI] Tipo ${fileType} no parseable, mostrando warning genérico`)
+    console.log(`[Guripa AI] Tipo ${fileType} no parseable, mostrando warning genérico`)
     return {
       shouldBlock: true,
       scanResult: null,
@@ -223,7 +223,7 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
   }
 
   if (fileType === 'unknown') {
-    console.log('[ShieldAI] Tipo de archivo desconocido, permitiendo')
+    console.log('[Guripa AI] Tipo de archivo desconocido, permitiendo')
     return { shouldBlock: false, scanResult: null }
   }
 
@@ -235,7 +235,7 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
       content = await extractPdfText(file)
       // Si el PDF está vacío después de intentar leerlo, mostrar warning genérico
       if (!content.trim()) {
-        console.log('[ShieldAI] No se pudo extraer texto del PDF, mostrando warning genérico')
+        console.log('[Guripa AI] No se pudo extraer texto del PDF, mostrando warning genérico')
         return {
           shouldBlock: true,
           scanResult: null,
@@ -245,7 +245,7 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
       content = await readDocxAsText(file)
       // Si no se pudo extraer texto, mostrar warning genérico
       if (!content.trim()) {
-        console.log('[ShieldAI] No se pudo extraer texto del .docx, mostrando warning genérico')
+        console.log('[Guripa AI] No se pudo extraer texto del .docx, mostrando warning genérico')
         return {
           shouldBlock: true,
           scanResult: null,
@@ -260,14 +260,14 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
       whitelistPatterns: config?.whitelistPatterns ?? [],
     })
 
-    console.log(`[ShieldAI] Escaneo completado: ${result.hasMatches ? 'DETECTADOS' : 'limpios'}`)
+    console.log(`[Guripa AI] Escaneo completado: ${result.hasMatches ? 'DETECTADOS' : 'limpios'}`)
 
     return {
       shouldBlock: result.hasMatches,
       scanResult: result,
     }
   } catch (err) {
-    console.warn('[ShieldAI] Error procesando archivo:', err)
+    console.warn('[Guripa AI] Error procesando archivo:', err)
     return { shouldBlock: false, scanResult: null }
   }
 }
@@ -413,12 +413,12 @@ async function handleFileInputChange(event: Event): Promise<void> {
   const file = files[0]
   const fileExt = file.name.split('.').pop() || 'unknown'
 
-  console.log(`[ShieldAI] 📁 Archivo seleccionado: ${file.name}`)
+  console.log(`[Guripa AI] 📁 Archivo seleccionado: ${file.name}`)
 
   const checkResult = await checkFileForSensitiveData(file)
 
   if (!checkResult.shouldBlock) {
-    console.log('[ShieldAI] ✅ Archivo permitido, no hay detecciones')
+    console.log('[Guripa AI] ✅ Archivo permitido, no hay detecciones')
     return
   }
 
@@ -430,10 +430,10 @@ async function handleFileInputChange(event: Event): Promise<void> {
   let userAccepted = false
 
   if (checkResult.scanResult === null) {
-    console.log('[ShieldAI] ⚠️ Warning genérico para archivo binario')
+    console.log('[Guripa AI] ⚠️ Warning genérico para archivo binario')
     userAccepted = await showFileWarningModalGeneric(file.name, fileExt)
   } else {
-    console.log(`[ShieldAI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
+    console.log(`[Guripa AI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
     const response = await showWarningModal(
       checkResult.scanResult.detections,
       checkResult.scanResult.riskLevel,
@@ -451,7 +451,7 @@ async function handleFileInputChange(event: Event): Promise<void> {
   sendEvent(buildPayload(checkResult.scanResult, action, userAccepted, file.name, fileExt))
 
   if (userAccepted) {
-    console.log('[ShieldAI] Usuario aceptó subir el archivo')
+    console.log('[Guripa AI] Usuario aceptó subir el archivo')
     // El usuario tendrá que re-seleccionar el archivo
   }
 }
@@ -465,7 +465,7 @@ async function handleDropEvent(event: DragEvent): Promise<void> {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
 
-  console.log(`[ShieldAI] 📂 Drop detectado con ${event.dataTransfer.files.length} archivo(s)`)
+  console.log(`[Guripa AI] 📂 Drop detectado con ${event.dataTransfer.files.length} archivo(s)`)
 
   // Procesar solo el primer archivo
   const file = event.dataTransfer.files[0]
@@ -474,7 +474,7 @@ async function handleDropEvent(event: DragEvent): Promise<void> {
   const checkResult = await checkFileForSensitiveData(file)
 
   if (!checkResult.shouldBlock) {
-    console.log('[ShieldAI] ✅ Archivo permitido, no hay detecciones')
+    console.log('[Guripa AI] ✅ Archivo permitido, no hay detecciones')
     return
   }
 
@@ -486,10 +486,10 @@ async function handleDropEvent(event: DragEvent): Promise<void> {
   let userAccepted = false
 
   if (checkResult.scanResult === null) {
-    console.log('[ShieldAI] ⚠️ Warning genérico para archivo binario')
+    console.log('[Guripa AI] ⚠️ Warning genérico para archivo binario')
     userAccepted = await showFileWarningModalGeneric(file.name, fileExt)
   } else {
-    console.log(`[ShieldAI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
+    console.log(`[Guripa AI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
     const response = await showWarningModal(
       checkResult.scanResult.detections,
       checkResult.scanResult.riskLevel,
@@ -558,10 +558,10 @@ export async function initFileInterceptor(
     return
   }
 
-  console.log('[ShieldAI] File interceptor inicializado para', platform)
+  console.log('[Guripa AI] File interceptor inicializado para', platform)
 
   observeFileInputs()
   document.addEventListener('drop', handleDropEvent, { capture: true })
 
-  console.log('[ShieldAI] Monitoreando subida de archivos con soporte PDF y .docx')
+  console.log('[Guripa AI] Monitoreando subida de archivos con soporte PDF y .docx')
 }

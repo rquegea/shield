@@ -116,7 +116,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!stored.config) {
     await chrome.storage.local.set({ config: DEFAULT_CONFIG })
   }
-  console.log('[ShieldAI] Extensión instalada')
+  console.log('[Guripa AI] Extensión instalada')
   syncAll()
 })
 
@@ -129,7 +129,7 @@ async function syncSelectors(): Promise<void> {
   try {
     const response = await fetch(`${config.backendUrl}/api/selectors`)
     if (!response.ok) {
-      console.warn('[ShieldAI] Selectores: respuesta', response.status)
+      console.warn('[Guripa AI] Selectores: respuesta', response.status)
       return
     }
 
@@ -138,9 +138,9 @@ async function syncSelectors(): Promise<void> {
       selectors: data.selectors,
       selectorsLastSync: Date.now(),
     })
-    console.log('[ShieldAI] Selectores sincronizados')
+    console.log('[Guripa AI] Selectores sincronizados')
   } catch (err) {
-    console.warn('[ShieldAI] Error sincronizando selectores:', err)
+    console.warn('[Guripa AI] Error sincronizando selectores:', err)
   }
 }
 
@@ -163,7 +163,7 @@ async function syncConfig(): Promise<void> {
       headers: { Authorization: `Bearer ${config.token}` },
     })
     if (!response.ok) {
-      console.warn('[ShieldAI] Config: respuesta', response.status)
+      console.warn('[Guripa AI] Config: respuesta', response.status)
       return
     }
 
@@ -181,9 +181,9 @@ async function syncConfig(): Promise<void> {
       await chrome.storage.local.set({ orgName: serverConfig.orgName })
     }
 
-    console.log('[ShieldAI] Configuración sincronizada')
+    console.log('[Guripa AI] Configuración sincronizada')
   } catch (err) {
-    console.warn('[ShieldAI] Error sincronizando config:', err)
+    console.warn('[Guripa AI] Error sincronizando config:', err)
   }
 }
 
@@ -231,7 +231,7 @@ async function sendEventToBackend(payload: EventPayload): Promise<{ ok: boolean;
 
     return { ok: true }
   } catch (err) {
-    console.error('[ShieldAI] Error enviando evento:', err)
+    console.error('[Guripa AI] Error enviando evento:', err)
     return { ok: false, error: String(err) }
   }
 }
@@ -277,7 +277,7 @@ async function processEventQueue(): Promise<void> {
   await chrome.storage.local.set({ eventQueue: remaining })
 
   if (remaining.length > 0) {
-    console.log(`[ShieldAI] ${remaining.length} eventos pendientes de reintento`)
+    console.log(`[Guripa AI] ${remaining.length} eventos pendientes de reintento`)
   }
 }
 
@@ -377,4 +377,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false
 })
 
-console.log('[ShieldAI] Service worker initialized')
+console.log('[Guripa AI] Service worker initialized')

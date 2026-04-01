@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Shield className="h-6 w-6" />
           </div>
-          <CardTitle className="text-xl">ShieldAI</CardTitle>
+          <CardTitle className="text-xl">Guripa AI</CardTitle>
           <CardDescription>Inicia sesión en tu panel de control</CardDescription>
         </CardHeader>
         <CardContent>

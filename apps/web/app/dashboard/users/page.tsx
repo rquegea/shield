@@ -172,7 +172,7 @@ export default function UsersPage() {
         <Info className="h-4 w-4" />
         <AlertTitle>Instrucciones de instalación</AlertTitle>
         <AlertDescription>
-          Para cada usuario: 1) Instala la extensión de Chrome, 2) Haz clic en el icono de ShieldAI,
+          Para cada usuario: 1) Instala la extensión de Chrome, 2) Haz clic en el icono de Guripa AI,
           3) Introduce la URL del servidor: <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}</code>,
           4) Pega el token del usuario y haz clic en Conectar.
         </AlertDescription>

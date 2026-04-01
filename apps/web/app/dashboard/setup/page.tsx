@@ -143,11 +143,11 @@ export default function SetupPage() {
               <div className="space-y-3 text-sm">
                 <div className="flex gap-3">
                   <Badge variant="secondary" className="shrink-0">1</Badge>
-                  <p>Instala la extensión de ShieldAI desde la Chrome Web Store</p>
+                  <p>Instala la extensión de Guripa AI desde la Chrome Web Store</p>
                 </div>
                 <div className="flex gap-3">
                   <Badge variant="secondary" className="shrink-0">2</Badge>
-                  <p>Haz clic en el icono de ShieldAI en la barra de extensiones</p>
+                  <p>Haz clic en el icono de Guripa AI en la barra de extensiones</p>
                 </div>
                 <div className="flex gap-3">
                   <Badge variant="secondary" className="shrink-0">3</Badge>

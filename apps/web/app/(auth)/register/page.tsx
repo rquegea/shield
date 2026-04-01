@@ -64,7 +64,7 @@ export default function RegisterPage() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Shield className="h-6 w-6" />
           </div>
-          <CardTitle className="text-xl">ShieldAI</CardTitle>
+          <CardTitle className="text-xl">Guripa AI</CardTitle>
           <CardDescription>Crea tu cuenta y protege los datos de tu empresa</CardDescription>
         </CardHeader>
         <CardContent>

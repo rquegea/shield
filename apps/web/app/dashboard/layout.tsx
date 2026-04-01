@@ -9,7 +9,7 @@ export default async function DashboardLayout({
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  let orgName = 'ShieldAI'
+  let orgName = 'Guripa AI'
   if (user) {
     const { data: adminUser } = await supabase
       .from('users')

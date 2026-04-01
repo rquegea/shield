@@ -1,4 +1,4 @@
-# ShieldAI — DLP para GenAI
+# Guripa AI — DLP para GenAI
 
 Extensión de Chrome + dashboard SaaS que detecta y bloquea el envío de datos sensibles a herramientas de IA (ChatGPT, Gemini, Claude) por parte de empleados de empresas. Enfocado en PYMEs europeas con datos españoles (DNI, NIE, CIF, IBAN).
 

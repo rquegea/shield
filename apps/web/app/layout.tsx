@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ShieldAI — DLP para GenAI",
+  title: "Guripa AI — DLP para GenAI",
   description:
     "Panel de control para protección de datos sensibles en herramientas de IA",
 };

@@ -13,7 +13,7 @@ export function DashboardSidebar({ orgName }: { orgName: string }) {
             <Shield className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold">ShieldAI</p>
+            <p className="text-sm font-semibold">Guripa AI</p>
             <p className="text-xs text-muted-foreground truncate max-w-[160px]">{orgName}</p>
           </div>
         </div>
