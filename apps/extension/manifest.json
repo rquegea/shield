@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ShieldAI - Protección de datos para IA",
+  "name": "Guripa AI - Protección de datos para IA",
   "version": "0.1.0",
   "description": "Detecta y bloquea el envío de datos sensibles a herramientas de IA",
   "permissions": [
@@ -13,6 +13,7 @@
     "https://gemini.google.com/*",
     "https://claude.ai/*",
     "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
     "https://copilot.microsoft.com/*"
   ],
   "background": {
@@ -27,6 +28,7 @@
         "https://gemini.google.com/*",
         "https://claude.ai/*",
         "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
         "https://copilot.microsoft.com/*"
       ],
       "js": ["content/interceptor.js"],
@@ -36,7 +38,7 @@
   ],
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "ShieldAI - Protección de datos para IA"
+    "default_title": "Guripa AI - Protección de datos para IA"
   },
   "icons": {
     "16": "icons/icon-16.png",

@@ -90,35 +90,48 @@ const CLAUDE_FALLBACK_SELECTORS: PlatformSelectors = {
 
 const PERPLEXITY_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
-    'textarea[placeholder*="Ask"]',
     'textarea',
+    'textarea[placeholder*="Ask"]',
+    'div[contenteditable="true"]',
     '[role="textbox"]',
+    '.py-3 textarea',
+    'input[type="text"]',
   ].join(', '),
   submit_button: [
-    'button[aria-label*="Submit"]',
-    'button[aria-label*="submit"]',
+    'button[aria-label*="submit" i]',
+    'button[aria-label*="send" i]',
+    'button[type="submit"]',
     'button.bg-super',
+    'button[data-testid*="send"]',
+    'button[class*="submit"]',
+    'button:has-text("Search")',
+    '.input-group button',
   ].join(', '),
-  content_area: '.prose, .markdown-content, [role="article"]',
-  input_container: 'form, [role="region"]',
+  content_area: '.prose, .markdown-content, [role="article"], .response',
+  input_container: 'form, .input-group, .search-box, [role="region"]',
 }
 
 const COPILOT_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
     'textarea#searchbox',
+    'textarea',
     'cib-text-input textarea',
     'textarea[id*="input"]',
-    'textarea',
     '[role="textbox"]',
+    'div[contenteditable="true"]',
+    'textarea[placeholder*="Ask"]',
   ].join(', '),
   submit_button: [
-    'button[aria-label*="Submit"]',
-    'button[aria-label*="submit"]',
-    'button[aria-label*="Enviar"]',
+    'button[aria-label*="submit" i]',
+    'button[aria-label*="send" i]',
+    'button[aria-label*="enviar" i]',
     'button[type="submit"]',
+    'cib-text-input button',
+    'button[class*="submit"]',
+    '[data-testid*="send"]',
   ].join(', '),
-  content_area: '.response-message, cib-message-group, [role="article"]',
-  input_container: 'form, .input-container, [role="region"]',
+  content_area: '.response-message, cib-message-group, [role="article"], .message-group',
+  input_container: 'form, .input-container, cib-text-input, [role="region"]',
 }
 
 const PLATFORM_FALLBACK_SELECTORS: Record<string, PlatformSelectors> = {
@@ -672,6 +685,7 @@ function startObserver(): void {
 // ============================================================================
 
 async function init(): Promise<void> {
+  console.log('[Guripa AI] hostname:', window.location.hostname)
   platform = detectPlatform()
 
   if (platform === 'unknown') {
