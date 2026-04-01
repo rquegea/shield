@@ -294,6 +294,59 @@ interface ValidateResult {
   error?: string
 }
 
+// --- Health check de selectores ---
+
+interface SelectorHealthReport {
+  platform: string
+  missingElements: Array<'textarea' | 'submit_button'>
+  selectorsUsed: Record<string, string>
+  timestamp: number
+}
+
+async function sendSelectorHealthReport(report: SelectorHealthReport): Promise<void> {
+  const config = await getConfig()
+  if (!config.backendUrl || !config.token) {
+    console.warn('[Guripa AI] No configurado, no se puede enviar health report')
+    return
+  }
+
+  try {
+    const response = await fetch(`${config.backendUrl}/api/health/selectors`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.token}`,
+      },
+      body: JSON.stringify({
+        platform: report.platform,
+        missing_elements: report.missingElements,
+        selectors_used: report.selectorsUsed,
+        user_agent: navigator.userAgent,
+        timestamp: report.timestamp,
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn(`[Guripa AI] Error enviando health report: ${response.status}`)
+      return
+    }
+
+    console.log('[Guripa AI] Health report enviado para', report.platform)
+  } catch (err) {
+    console.error('[Guripa AI] Error enviando health report:', err)
+  }
+}
+
+async function shouldThrottleSelectorHealth(platform: string): Promise<boolean> {
+  const { lastHealthReport = {} } = await chrome.storage.local.get(['lastHealthReport'])
+  const reports = lastHealthReport as Record<string, number>
+  const lastReportTime = reports[platform] ?? 0
+  const now = Date.now()
+  const twentyFourHoursMs = 24 * 60 * 60 * 1000
+
+  return now - lastReportTime < twentyFourHoursMs
+}
+
 async function validateToken(backendUrl: string, token: string): Promise<ValidateResult> {
   try {
     const response = await fetch(`${backendUrl}/api/config`, {
@@ -371,6 +424,43 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Popup pide forzar sincronización
   if (message.type === 'FORCE_SYNC') {
     syncAll().then(() => sendResponse({ ok: true }))
+    return true
+  }
+
+  // Content script reporta fallo de health check en selectores
+  if (message.type === 'SELECTOR_HEALTH_FAIL') {
+    const { platform, missingElements, selectorsUsed, timestamp } = message as SelectorHealthReport & { type: string }
+
+    shouldThrottleSelectorHealth(platform).then((throttled) => {
+      if (throttled) {
+        console.log(`[Guripa AI] Health report throttleado para ${platform}`)
+        return
+      }
+
+      const report: SelectorHealthReport = {
+        platform,
+        missingElements,
+        selectorsUsed,
+        timestamp,
+      }
+
+      sendSelectorHealthReport(report).then(() => {
+        // Registrar que se envió un report para este platform
+        chrome.storage.local.get(['lastHealthReport']).then((result) => {
+          const reports = (result.lastHealthReport ?? {}) as Record<string, number>
+          reports[platform] = Date.now()
+          chrome.storage.local.set({ lastHealthReport: reports })
+        })
+      })
+    })
+    return true
+  }
+
+  // Popup pide el estado de health check
+  if (message.type === 'GET_SELECTOR_HEALTH') {
+    chrome.storage.local.get(['selectorHealth']).then((result) => {
+      sendResponse(result.selectorHealth ?? {})
+    })
     return true
   }
 

@@ -6,6 +6,7 @@ import type { ExtensionConfig } from '../types'
 
 const statusPill = document.getElementById('status-pill') as HTMLDivElement
 const statusText = document.getElementById('status-text') as HTMLSpanElement
+const healthWarning = document.getElementById('health-warning') as HTMLDivElement
 const infoSection = document.getElementById('info-section') as HTMLDivElement
 const connectSection = document.getElementById('connect-section') as HTMLDivElement
 const orgNameEl = document.getElementById('org-name') as HTMLDivElement
@@ -92,9 +93,17 @@ function getPlatformCount(): number {
   return 6
 }
 
+// --- Detect current platform ---
+
+function detectCurrentPlatform(): string | null {
+  // Solo funciona si el popup se abre desde una pestaña de una plataforma conocida
+  // Pero normalmente el popup se abre desde cualquier pestaña, así que esto es mostly informativo
+  return null
+}
+
 // --- Mostrar UI según estado ---
 
-function showConnected(config: ExtensionConfig, orgName: string, eventsToday: number, weeklyData: number[]): void {
+function showConnected(config: ExtensionConfig, orgName: string, eventsToday: number, weeklyData: number[], selectorHealth?: Record<string, { status: 'ok' | 'fail' }>): void {
   // Status pill
   if (!config.enabled) {
     statusPill.className = 'status-pill error'
@@ -102,6 +111,14 @@ function showConnected(config: ExtensionConfig, orgName: string, eventsToday: nu
   } else {
     statusPill.className = 'status-pill connected'
     statusText.textContent = '● Protección activa'
+  }
+
+  // Health warning — mostrar si algún selector está en fail
+  const hasHealthIssue = selectorHealth && Object.values(selectorHealth).some((h) => h.status === 'fail')
+  if (hasHealthIssue) {
+    healthWarning.classList.remove('hidden')
+  } else {
+    healthWarning.classList.add('hidden')
   }
 
   // Info cards
@@ -243,8 +260,9 @@ async function loadAndRender(): Promise<void> {
   const { orgName = '' } = await chrome.storage.local.get(['orgName'])
   const { count: eventsToday } = await sendMessage<{ count: number }>({ type: 'GET_EVENTS_TODAY' })
   const { data: weeklyData } = await sendMessage<{ data: number[] }>({ type: 'GET_WEEKLY_ACTIVITY' })
+  const selectorHealth = await sendMessage<Record<string, { status: 'ok' | 'fail' }>>({ type: 'GET_SELECTOR_HEALTH' })
 
-  showConnected(config, orgName as string, eventsToday, weeklyData ?? [0, 0, 0, 0, 0, 0, 0])
+  showConnected(config, orgName as string, eventsToday, weeklyData ?? [0, 0, 0, 0, 0, 0, 0], selectorHealth)
 }
 
 // --- Event listeners ---

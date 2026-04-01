@@ -353,6 +353,38 @@
     .feedback.shake { animation: shake 0.4s ease-in-out; }
     .feedback .checkmark { animation: checkPop 0.4s ease-out; display: inline-block; }
 
+    /* --- Health warning --- */
+    .health-warning {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(251,191,36,0.12);
+      border: 1px solid rgba(251,191,36,0.2);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .health-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .health-text {
+      flex: 1;
+    }
+    .health-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fbbf24;
+      margin-bottom: 2px;
+    }
+    .health-desc {
+      font-size: 11px;
+      color: #ca8a04;
+      opacity: 0.9;
+    }
+
     /* --- Hidden --- */
     .hidden { display: none !important; }
   </style>
@@ -379,6 +411,15 @@
     <div id="status-pill" class="status-pill disconnected">
       <span class="status-dot"></span>
       <span id="status-text">No configurada</span>
+    </div>
+
+    <!-- Health warning -->
+    <div id="health-warning" class="health-warning hidden">
+      <div class="health-icon">⚠</div>
+      <div class="health-text">
+        <div class="health-title">Selectores desactualizados</div>
+        <div class="health-desc">La protección puede estar limitada</div>
+      </div>
     </div>
 
     <!-- ======= CONNECTED STATE ======= -->

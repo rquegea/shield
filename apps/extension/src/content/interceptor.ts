@@ -20,6 +20,7 @@ import type { ScanResult, DetectorType } from '@shieldai/detectors'
 import type { ExtensionConfig, PlatformSelectors, EventPayload } from '../types'
 import { updateBanner, removeBanner, unblockButtons } from './ui/InlineBanner'
 import { initFileInterceptor } from './fileInterceptor'
+import { startHealthCheck } from './healthCheck'
 
 // ============================================================================
 // Estado global
@@ -728,6 +729,9 @@ async function init(): Promise<void> {
 
   // Inicializar file interceptor
   await initFileInterceptor(config, platform)
+
+  // Iniciar health check de selectores
+  startHealthCheck(platform, selectors)
 
   console.log('[Guripa AI] Interceptor activo en', platform)
 }
