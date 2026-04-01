@@ -1,0 +1,20 @@
+{
+  "name": "@shieldai/extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch"
+  },
+  "dependencies": {
+    "@shieldai/detectors": "*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.38",
+    "copy-webpack-plugin": "^12.0.0",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.4.0",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.0"
+  }
+}

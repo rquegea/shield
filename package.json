@@ -1,0 +1,15 @@
+{
+  "name": "shieldai",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "build:ext": "npm run build --workspace=apps/extension",
+    "test": "npm test --workspace=packages/detectors",
+    "lint": "npm run lint --workspace=apps/web"
+  }
+}

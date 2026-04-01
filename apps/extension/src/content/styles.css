@@ -1,0 +1,14 @@
+/* ShieldAI content script styles — minimal, solo para el host del modal */
+.shieldai-modal-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+.shieldai-modal-host[data-visible="true"] {
+  pointer-events: all;
+}

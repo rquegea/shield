@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "ShieldAI - Protección de datos para IA",
+  "version": "0.1.0",
+  "description": "Detecta y bloquea el envío de datos sensibles a herramientas de IA",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://copilot.microsoft.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://claude.ai/*",
+        "https://www.perplexity.ai/*",
+        "https://copilot.microsoft.com/*"
+      ],
+      "js": ["content/interceptor.js"],
+      "css": ["content/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "ShieldAI - Protección de datos para IA"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

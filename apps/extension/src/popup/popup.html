@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShieldAI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #111827;
+      background: #fff;
+    }
+
+    /* --- Header --- */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .header img { width: 28px; height: 28px; }
+    .header h1 { font-size: 15px; font-weight: 600; color: #111827; }
+
+    /* --- Contenido --- */
+    .body { padding: 16px 20px 20px; }
+
+    /* --- Status banner --- */
+    .status-banner {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .status-banner.connected { background: #dcfce7; color: #166534; }
+    .status-banner.disconnected { background: #f3f4f6; color: #6b7280; }
+    .status-banner.error { background: #fee2e2; color: #991b1b; }
+    .status-banner.loading { background: #eff6ff; color: #1d4ed8; }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .connected .status-dot { background: #22c55e; }
+    .disconnected .status-dot { background: #9ca3af; }
+    .error .status-dot { background: #ef4444; }
+
+    /* --- Info rows --- */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .info-card {
+      background: #f9fafb;
+      border: 1px solid #f3f4f6;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .info-card.full { grid-column: 1 / -1; }
+    .info-label {
+      font-size: 11px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 2px;
+    }
+    .info-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+    }
+    .info-value.mode-warn { color: #d97706; }
+    .info-value.mode-block { color: #dc2626; }
+    .info-value.mode-monitor { color: #2563eb; }
+
+    /* --- Separador --- */
+    .divider {
+      height: 1px;
+      background: #f3f4f6;
+      margin: 16px 0;
+    }
+
+    /* --- Formulario --- */
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #9ca3af;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 10px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    input::placeholder { color: #c4c9d1; }
+
+    /* --- Botones --- */
+    .buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn {
+      flex: 1;
+      padding: 9px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      color: #374151;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .btn:hover { background: #f9fafb; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: #3b82f6;
+      color: #fff;
+      border-color: #3b82f6;
+    }
+    .btn-primary:hover:not(:disabled) { background: #2563eb; }
+    .btn-danger {
+      background: #fff;
+      color: #dc2626;
+      border-color: #fecaca;
+    }
+    .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+
+    /* --- Feedback message --- */
+    .feedback {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+    .feedback.success { color: #16a34a; }
+    .feedback.error { color: #dc2626; }
+
+    /* --- Ocultar secciones --- */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="../icons/icon-48.png" alt="ShieldAI">
+    <h1>ShieldAI</h1>
+  </div>
+
+  <div class="body">
+    <!-- Status -->
+    <div id="status-banner" class="status-banner disconnected">
+      <span class="status-dot"></span>
+      <span id="status-text">No configurada</span>
+    </div>
+
+    <!-- Info cards (solo visibles cuando conectado) -->
+    <div id="info-section" class="hidden">
+      <div class="info-grid">
+        <div class="info-card full">
+          <div class="info-label">Organización</div>
+          <div class="info-value" id="org-name">—</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Modo</div>
+          <div class="info-value" id="policy-mode">—</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Eventos hoy</div>
+          <div class="info-value" id="events-today">0</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Detectores</div>
+          <div class="info-value" id="detectors-count">—</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Protección</div>
+          <div class="info-value" id="enabled-status">Activa</div>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button class="btn btn-danger" id="toggle-btn">Desactivar</button>
+        <button class="btn" id="disconnect-btn">Desconectar</button>
+      </div>
+    </div>
+
+    <!-- Formulario de conexión (visible cuando no conectado) -->
+    <div id="connect-section">
+      <div class="section-title">Conectar al servidor</div>
+
+      <label for="url-input">URL del servidor</label>
+      <input type="text" id="url-input" placeholder="https://tu-empresa.shieldai.app" autocomplete="url">
+
+      <label for="token-input">Token de usuario</label>
+      <input type="password" id="token-input" placeholder="Tu token de extensión" autocomplete="off">
+
+      <div class="buttons">
+        <button class="btn btn-primary" id="connect-btn">Conectar</button>
+      </div>
+
+      <div id="feedback" class="feedback"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
