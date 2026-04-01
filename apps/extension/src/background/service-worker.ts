@@ -11,7 +11,7 @@ const DEFAULT_CONFIG: ExtensionConfig = {
   backendUrl: '',
   enabled: true,
   policyMode: 'warn',
-  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL'],
+  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL', 'PASSPORT_SPAIN', 'NIF_PORTUGAL', 'CODICE_FISCALE', 'BIRTHDATE'],
   whitelistPatterns: [],
 }
 
@@ -36,6 +36,10 @@ interface DailyCounter {
   count: number
 }
 
+interface WeeklyActivity {
+  [date: string]: number // YYYY-MM-DD → count
+}
+
 function todayString(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -51,7 +55,51 @@ async function incrementEventsToday(): Promise<number> {
   }
 
   await chrome.storage.local.set({ eventsToday: newCounter })
+
+  // Also update weekly activity
+  await incrementWeeklyActivity(today)
+
   return newCounter.count
+}
+
+async function incrementWeeklyActivity(date: string): Promise<void> {
+  const { weeklyActivity = {} } = await chrome.storage.local.get(['weeklyActivity'])
+  const activity = weeklyActivity as WeeklyActivity
+  activity[date] = (activity[date] ?? 0) + 1
+
+  // Prune entries older than 8 days
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 8)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+  for (const key of Object.keys(activity)) {
+    if (key < cutoffStr) delete activity[key]
+  }
+
+  await chrome.storage.local.set({ weeklyActivity: activity })
+}
+
+async function getWeeklyActivity(): Promise<number[]> {
+  const { weeklyActivity = {} } = await chrome.storage.local.get(['weeklyActivity'])
+  const activity = weeklyActivity as WeeklyActivity
+
+  // Also count queued events by day
+  const { eventQueue = [] } = await chrome.storage.local.get(['eventQueue'])
+  const queue = eventQueue as QueuedEvent[]
+  const queueByDay: WeeklyActivity = {}
+  for (const item of queue) {
+    const day = new Date(item.timestamp).toISOString().slice(0, 10)
+    queueByDay[day] = (queueByDay[day] ?? 0) + 1
+  }
+
+  const result: number[] = []
+  const today = new Date()
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    result.push((activity[key] ?? 0) + (queueByDay[key] ?? 0))
+  }
+  return result
 }
 
 async function getEventsToday(): Promise<number> {
@@ -304,6 +352,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Popup pide el contador de eventos de hoy
   if (message.type === 'GET_EVENTS_TODAY') {
     getEventsToday().then((count) => sendResponse({ count }))
+    return true
+  }
+
+  // Popup pide actividad semanal
+  if (message.type === 'GET_WEEKLY_ACTIVITY') {
+    getWeeklyActivity().then((data) => sendResponse({ data }))
     return true
   }
 

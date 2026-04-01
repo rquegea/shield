@@ -8,6 +8,11 @@ import { detectCreditCard } from './patterns/credit-card'
 import { detectSsnSpain } from './patterns/ssn-spain'
 import { detectPhoneSpain } from './patterns/phone-spain'
 import { detectEmail } from './patterns/email'
+import { detectPassportSpain } from './patterns/passport-spain'
+import { detectPlateSpain } from './patterns/plate-spain'
+import { detectNifPortugal } from './patterns/nif-portugal'
+import { detectCodiceFiscale } from './patterns/codice-fiscale'
+import { detectBirthdate } from './patterns/birthdate'
 
 const DETECTOR_MAP: Record<DetectorType, (text: string) => Detection[]> = {
   DNI: detectDni,
@@ -18,13 +23,20 @@ const DETECTOR_MAP: Record<DetectorType, (text: string) => Detection[]> = {
   SSN_SPAIN: detectSsnSpain,
   PHONE_SPAIN: detectPhoneSpain,
   EMAIL: detectEmail,
-  PASSPORT_SPAIN: () => [], // No implementado aún
+  PASSPORT_SPAIN: detectPassportSpain,
+  PLATE_SPAIN: detectPlateSpain,
+  NIF_PORTUGAL: detectNifPortugal,
+  CODICE_FISCALE: detectCodiceFiscale,
+  BIRTHDATE: detectBirthdate,
 }
 
 const ALL_DETECTORS: DetectorType[] = Object.keys(DETECTOR_MAP) as DetectorType[]
 
+// PLATE_SPAIN es opcional y no está habilitado por defecto
+const DEFAULT_ENABLED_DETECTORS: DetectorType[] = ALL_DETECTORS.filter((d) => d !== 'PLATE_SPAIN')
+
 const DEFAULT_CONFIG: ScanConfig = {
-  enabledDetectors: ALL_DETECTORS,
+  enabledDetectors: DEFAULT_ENABLED_DETECTORS,
   whitelistPatterns: [],
   sensitivityLevel: 'medium',
 }

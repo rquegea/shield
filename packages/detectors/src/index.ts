@@ -25,6 +25,11 @@ export { detectCreditCard } from './patterns/credit-card'
 export { detectSsnSpain } from './patterns/ssn-spain'
 export { detectPhoneSpain } from './patterns/phone-spain'
 export { detectEmail } from './patterns/email'
+export { detectPassportSpain } from './patterns/passport-spain'
+export { detectPlateSpain } from './patterns/plate-spain'
+export { detectNifPortugal } from './patterns/nif-portugal'
+export { detectCodiceFiscale } from './patterns/codice-fiscale'
+export { detectBirthdate } from './patterns/birthdate'
 
 // Utilidad de enmascaramiento
 export function maskValue(value: string, visibleChars = 4): string {

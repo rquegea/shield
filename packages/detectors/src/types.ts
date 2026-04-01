@@ -8,6 +8,10 @@ export type DetectorType =
   | 'PHONE_SPAIN'
   | 'EMAIL'
   | 'PASSPORT_SPAIN'
+  | 'PLATE_SPAIN'
+  | 'NIF_PORTUGAL'
+  | 'CODICE_FISCALE'
+  | 'BIRTHDATE'
 
 export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
 

@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
     enabled_detectors: [
       'DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD',
       'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL',
+      'PASSPORT_SPAIN', 'NIF_PORTUGAL', 'CODICE_FISCALE', 'BIRTHDATE',
     ],
   })
 

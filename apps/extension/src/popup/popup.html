@@ -6,11 +6,37 @@
   <title>ShieldAI</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    @keyframes checkPop {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
     body {
-      width: 360px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #111827;
-      background: #fff;
+      width: 380px;
+      font-family: -apple-system, 'SF Pro Display', BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #e2e8f0;
+      background: linear-gradient(165deg, #1a1a2e 0%, #16213e 100%);
+      -webkit-font-smoothing: antialiased;
     }
 
     /* --- Header --- */
@@ -19,208 +45,415 @@
       align-items: center;
       gap: 10px;
       padding: 18px 20px 14px;
-      border-bottom: 1px solid #f3f4f6;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .header img { width: 28px; height: 28px; }
-    .header h1 { font-size: 15px; font-weight: 600; color: #111827; }
+    .header-logo {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f1f5f9;
+      flex: 1;
+    }
+    .header-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(148,163,184,0.12);
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.03em;
+    }
 
-    /* --- Contenido --- */
+    /* --- Body --- */
     .body { padding: 16px 20px 20px; }
 
-    /* --- Status banner --- */
-    .status-banner {
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 500;
-      text-align: center;
-      margin-bottom: 16px;
+    /* --- Status pill --- */
+    .status-pill {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      padding: 10px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      animation: fadeIn 0.4s ease-out;
     }
-    .status-banner.connected { background: #dcfce7; color: #166534; }
-    .status-banner.disconnected { background: #f3f4f6; color: #6b7280; }
-    .status-banner.error { background: #fee2e2; color: #991b1b; }
-    .status-banner.loading { background: #eff6ff; color: #1d4ed8; }
+    .status-pill.connected {
+      background: rgba(34,197,94,0.12);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+    .status-pill.disconnected {
+      background: rgba(148,163,184,0.1);
+      color: #94a3b8;
+      border: 1px solid rgba(148,163,184,0.15);
+    }
+    .status-pill.error {
+      background: rgba(239,68,68,0.12);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,0.2);
+    }
+    .status-pill.loading {
+      background: rgba(59,130,246,0.12);
+      color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.2);
+    }
     .status-dot {
-      width: 8px; height: 8px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .connected .status-dot { background: #22c55e; }
-    .disconnected .status-dot { background: #9ca3af; }
+    .connected .status-dot {
+      background: #22c55e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .disconnected .status-dot { background: #64748b; }
     .error .status-dot { background: #ef4444; }
+    .loading .status-dot { background: #3b82f6; animation: pulse 1s ease-in-out infinite; }
 
-    /* --- Info rows --- */
-    .info-grid {
+    /* --- Cards --- */
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      animation: fadeIn 0.5s ease-out backwards;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .card:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.1);
+    }
+    .card:nth-child(2) { animation-delay: 0.05s; }
+    .card:nth-child(3) { animation-delay: 0.1s; }
+    .card:nth-child(4) { animation-delay: 0.15s; }
+
+    .card-label {
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .card-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    /* --- Metrics grid --- */
+    .metrics-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
-    .info-card {
-      background: #f9fafb;
-      border: 1px solid #f3f4f6;
-      border-radius: 8px;
-      padding: 10px 12px;
+    .metric-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 12px 14px;
+      animation: fadeIn 0.5s ease-out backwards;
+      transition: background 0.2s, border-color 0.2s;
     }
-    .info-card.full { grid-column: 1 / -1; }
-    .info-label {
-      font-size: 11px;
-      color: #9ca3af;
+    .metric-card:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.1);
+    }
+    .metric-card:nth-child(1) { animation-delay: 0.1s; }
+    .metric-card:nth-child(2) { animation-delay: 0.15s; }
+    .metric-card:nth-child(3) { animation-delay: 0.2s; }
+    .metric-card:nth-child(4) { animation-delay: 0.25s; }
+    .metric-label {
+      font-size: 10px;
+      color: #64748b;
       text-transform: uppercase;
-      letter-spacing: 0.03em;
-      margin-bottom: 2px;
+      letter-spacing: 0.05em;
+      font-weight: 500;
+      margin-bottom: 4px;
     }
-    .info-value {
+    .metric-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f1f5f9;
+      line-height: 1.1;
+    }
+    .metric-value.mode-warn { color: #fbbf24; }
+    .metric-value.mode-block { color: #ef4444; }
+    .metric-value.mode-monitor { color: #3b82f6; }
+    .metric-value.small-text {
       font-size: 14px;
       font-weight: 600;
-      color: #374151;
-    }
-    .info-value.mode-warn { color: #d97706; }
-    .info-value.mode-block { color: #dc2626; }
-    .info-value.mode-monitor { color: #2563eb; }
-
-    /* --- Separador --- */
-    .divider {
-      height: 1px;
-      background: #f3f4f6;
-      margin: 16px 0;
     }
 
-    /* --- Formulario --- */
-    .section-title {
-      font-size: 12px;
+    /* --- Chart --- */
+    .chart-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      animation: fadeIn 0.5s ease-out 0.3s backwards;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .chart-card:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.1);
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .chart-title {
+      font-size: 11px;
+      color: #64748b;
       text-transform: uppercase;
-      color: #9ca3af;
-      letter-spacing: 0.04em;
-      margin-bottom: 10px;
+      letter-spacing: 0.05em;
       font-weight: 500;
     }
-    label {
-      display: block;
-      font-size: 12px;
-      color: #6b7280;
-      margin-bottom: 4px;
+    .chart-total {
+      font-size: 11px;
+      color: #94a3b8;
       font-weight: 500;
     }
-    input[type="text"], input[type="password"] {
-      width: 100%;
-      padding: 9px 11px;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      font-size: 13px;
-      margin-bottom: 10px;
-      outline: none;
-      transition: border-color 0.15s;
-      font-family: inherit;
+    .chart-days {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
     }
-    input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-    input::placeholder { color: #c4c9d1; }
+    .chart-day-label {
+      font-size: 9px;
+      color: #475569;
+      text-align: center;
+      width: 36px;
+    }
 
-    /* --- Botones --- */
+    /* --- Buttons --- */
     .buttons {
       display: flex;
-      gap: 8px;
-      margin-top: 4px;
+      gap: 10px;
+      animation: fadeIn 0.5s ease-out 0.35s backwards;
     }
     .btn {
       flex: 1;
-      padding: 9px;
-      border-radius: 8px;
+      padding: 10px;
+      border-radius: 10px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
-      border: 1px solid #d1d5db;
-      background: #fff;
-      color: #374151;
-      transition: all 0.15s;
+      border: none;
+      transition: all 0.2s;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-outline {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid rgba(148,163,184,0.25);
+    }
+    .btn-outline:hover:not(:disabled) {
+      background: rgba(148,163,184,0.08);
+      border-color: rgba(148,163,184,0.4);
+      color: #e2e8f0;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(59,130,246,0.3);
+    }
+    .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 4px 16px rgba(59,130,246,0.4);
+      filter: brightness(1.08);
+    }
+
+    .btn-dashboard {
+      background: rgba(59,130,246,0.12);
+      color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.2);
+    }
+    .btn-dashboard:hover:not(:disabled) {
+      background: rgba(59,130,246,0.18);
+      border-color: rgba(59,130,246,0.35);
+    }
+
+    /* --- Disconnected state --- */
+    .disconnected-illustration {
+      text-align: center;
+      padding: 16px 0 20px;
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #64748b;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    .input-group input {
+      width: 100%;
+      padding: 10px 13px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      font-size: 13px;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
       font-family: inherit;
     }
-    .btn:hover { background: #f9fafb; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-primary {
-      background: #3b82f6;
-      color: #fff;
-      border-color: #3b82f6;
+    .input-group input::placeholder { color: #475569; }
+    .input-group input:focus {
+      border-color: rgba(59,130,246,0.5);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
     }
-    .btn-primary:hover:not(:disabled) { background: #2563eb; }
-    .btn-danger {
-      background: #fff;
-      color: #dc2626;
-      border-color: #fecaca;
-    }
-    .btn-danger:hover:not(:disabled) { background: #fef2f2; }
 
-    /* --- Feedback message --- */
+    /* --- Feedback --- */
     .feedback {
       font-size: 12px;
       text-align: center;
-      margin-top: 8px;
-      min-height: 16px;
+      margin-top: 10px;
+      min-height: 18px;
+      font-weight: 500;
     }
-    .feedback.success { color: #16a34a; }
-    .feedback.error { color: #dc2626; }
+    .feedback.success { color: #4ade80; }
+    .feedback.error { color: #f87171; }
+    .feedback.shake { animation: shake 0.4s ease-in-out; }
+    .feedback .checkmark { animation: checkPop 0.4s ease-out; display: inline-block; }
 
-    /* --- Ocultar secciones --- */
+    /* --- Hidden --- */
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <div class="header">
-    <img src="../icons/icon-48.png" alt="ShieldAI">
-    <h1>ShieldAI</h1>
+    <svg class="header-logo" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="shieldGrad" x1="5" y1="3" x2="25" y2="27" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#3b82f6"/>
+          <stop offset="100%" stop-color="#6366f1"/>
+        </linearGradient>
+      </defs>
+      <path d="M15 2L4 7v8c0 7.5 4.7 12.5 11 14 6.3-1.5 11-6.5 11-14V7L15 2z" fill="url(#shieldGrad)" opacity="0.9"/>
+      <path d="M12.5 15.5l2.5 2.5 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <span class="header-title">ShieldAI</span>
+    <span class="header-badge">v0.2</span>
   </div>
 
   <div class="body">
-    <!-- Status -->
-    <div id="status-banner" class="status-banner disconnected">
+    <!-- Status pill -->
+    <div id="status-pill" class="status-pill disconnected">
       <span class="status-dot"></span>
       <span id="status-text">No configurada</span>
     </div>
 
-    <!-- Info cards (solo visibles cuando conectado) -->
+    <!-- ======= CONNECTED STATE ======= -->
     <div id="info-section" class="hidden">
-      <div class="info-grid">
-        <div class="info-card full">
-          <div class="info-label">Organización</div>
-          <div class="info-value" id="org-name">—</div>
+      <!-- Org card -->
+      <div class="card">
+        <div class="card-label">Organización</div>
+        <div class="card-value" id="org-name">—</div>
+        <div class="card-sub" id="org-plan">Plan Enterprise</div>
+      </div>
+
+      <!-- Metrics 2x2 -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Modo</div>
+          <div class="metric-value small-text" id="policy-mode">—</div>
         </div>
-        <div class="info-card">
-          <div class="info-label">Modo</div>
-          <div class="info-value" id="policy-mode">—</div>
+        <div class="metric-card">
+          <div class="metric-label">Eventos hoy</div>
+          <div class="metric-value" id="events-today">0</div>
         </div>
-        <div class="info-card">
-          <div class="info-label">Eventos hoy</div>
-          <div class="info-value" id="events-today">0</div>
+        <div class="metric-card">
+          <div class="metric-label">Detectores</div>
+          <div class="metric-value" id="detectors-count">—</div>
         </div>
-        <div class="info-card">
-          <div class="info-label">Detectores</div>
-          <div class="info-value" id="detectors-count">—</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">Protección</div>
-          <div class="info-value" id="enabled-status">Activa</div>
+        <div class="metric-card">
+          <div class="metric-label">Plataformas</div>
+          <div class="metric-value" id="platforms-count">6</div>
         </div>
       </div>
 
+      <!-- Weekly chart -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Actividad — últimos 7 días</span>
+          <span class="chart-total" id="chart-total">0 eventos</span>
+        </div>
+        <svg id="weekly-chart" width="100%" height="50" viewBox="0 0 308 50" preserveAspectRatio="none"></svg>
+        <div class="chart-days" id="chart-days"></div>
+      </div>
+
+      <!-- Buttons -->
       <div class="buttons">
-        <button class="btn btn-danger" id="toggle-btn">Desactivar</button>
-        <button class="btn" id="disconnect-btn">Desconectar</button>
+        <button class="btn btn-outline" id="toggle-btn">Pausar protección</button>
+        <button class="btn btn-dashboard" id="dashboard-btn">Abrir dashboard</button>
       </div>
     </div>
 
-    <!-- Formulario de conexión (visible cuando no conectado) -->
+    <!-- ======= DISCONNECTED STATE ======= -->
     <div id="connect-section">
+      <!-- Illustration -->
+      <div class="disconnected-illustration">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="shieldGrad2" x1="12" y1="6" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#6366f1" stop-opacity="0.15"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 4L8 15v17c0 16 10.2 27 24 30 13.8-3 24-14 24-30V15L32 4z" fill="url(#shieldGrad2)" stroke="rgba(99,102,241,0.3)" stroke-width="1.5"/>
+          <text x="32" y="42" text-anchor="middle" font-size="24" font-weight="600" fill="#64748b" font-family="-apple-system, sans-serif">?</text>
+        </svg>
+      </div>
+
       <div class="section-title">Conectar al servidor</div>
 
-      <label for="url-input">URL del servidor</label>
-      <input type="text" id="url-input" placeholder="https://tu-empresa.shieldai.app" autocomplete="url">
+      <div class="input-group">
+        <label for="url-input">URL del servidor</label>
+        <input type="text" id="url-input" placeholder="https://tu-empresa.shieldai.app" autocomplete="url">
+      </div>
 
-      <label for="token-input">Token de usuario</label>
-      <input type="password" id="token-input" placeholder="Tu token de extensión" autocomplete="off">
+      <div class="input-group">
+        <label for="token-input">Token de usuario</label>
+        <input type="password" id="token-input" placeholder="Tu token de extensión" autocomplete="off">
+      </div>
 
       <div class="buttons">
         <button class="btn btn-primary" id="connect-btn">Conectar</button>

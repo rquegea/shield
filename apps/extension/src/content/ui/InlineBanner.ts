@@ -11,56 +11,138 @@
 
 import type { ScanResult } from '@shieldai/detectors'
 
-// ─── Estilos del banner (Shadow DOM) ───
+// ─── Colores por nivel de riesgo ───
+
+const RISK_COLORS: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+  critical: { bg: 'rgba(239,68,68,0.08)', border: '#ef4444', text: '#dc2626', icon: '#ef4444' },
+  high:     { bg: 'rgba(249,115,22,0.08)', border: '#f97316', text: '#ea580c', icon: '#f97316' },
+  medium:   { bg: 'rgba(234,179,8,0.08)',  border: '#eab308', text: '#ca8a04', icon: '#eab308' },
+  low:      { bg: 'rgba(34,197,94,0.08)',  border: '#22c55e', text: '#16a34a', icon: '#22c55e' },
+}
+
+// ─── SVG del escudo (template) ───
+
+function shieldSvg(color: string): string {
+  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 1L2 3.5v4.25C2 11.85 4.7 15 8 16c3.3-1 6-4.15 6-8.25V3.5L8 1z" fill="${color}" opacity="0.2" stroke="${color}" stroke-width="1" stroke-linejoin="round"/>
+    <path d="M5.5 8.5L7 10l3.5-3.5" stroke="${color}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg>`
+}
+
+// ─── Estilos del banner flotante (Shadow DOM) ───
 
 const BANNER_STYLES = /* css */ `
   :host {
     all: initial;
-    display: block;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    max-width: 420px;
+    z-index: 2147483646;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.4;
   }
+
   .banner {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border-radius: 8px;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
     font-size: 13px;
-    animation: slideIn 0.15s ease-out;
-    margin-top: 6px;
+    border-left-width: 4px;
+    border-left-style: solid;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    animation: slideDownIn 0.3s ease-out;
     flex-wrap: wrap;
   }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+
+  @keyframes slideDownIn {
+    from {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .banner.risk-critical { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-  .banner.risk-high     { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
-  .banner.risk-medium   { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
-  .banner.risk-low      { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+  @keyframes slideUpOut {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to   {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+  }
 
-  .icon { flex-shrink: 0; font-size: 14px; }
-  .content { flex: 1; min-width: 0; }
-  .text { font-weight: 500; }
-  .details { font-weight: 400; opacity: 0.85; font-size: 12px; }
+  .banner.removing {
+    animation: slideUpOut 0.2s ease-in forwards;
+  }
+
+  .icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .text {
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .details {
+    font-weight: 400;
+    opacity: 0.85;
+    font-size: 12px;
+  }
 
   .btn-accept {
     margin-left: auto;
     padding: 5px 12px;
     border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 500;
     cursor: pointer;
-    border: none;
-    background: #dc2626;
-    color: #fff;
+    background: transparent;
     white-space: nowrap;
-    transition: background 0.15s;
+    transition: background 0.15s, color 0.15s;
     font-family: inherit;
+    border-width: 1px;
+    border-style: solid;
+    line-height: 1.4;
   }
-  .btn-accept:hover { background: #b91c1c; }
+
+  .btn-accept:hover {
+    background: rgba(239,68,68,0.1);
+  }
+
+  /* Mobile: stack vertically */
+  @media (max-width: 480px) {
+    :host {
+      left: 12px;
+      right: 12px;
+      max-width: none;
+    }
+    .banner {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .btn-accept {
+      margin-left: 26px;
+      margin-top: 4px;
+    }
+  }
 `
 
 // ─── CSS inyectado en la página host para deshabilitar botones del form ───
@@ -111,7 +193,7 @@ let bannerHost: HTMLElement | null = null
 let bannerShadow: ShadowRoot | null = null
 let currentOnAccept: (() => void) | null = null
 
-function ensureBannerHost(anchorElement: HTMLElement): ShadowRoot {
+function ensureBannerHost(_anchorElement: HTMLElement): ShadowRoot {
   if (bannerHost && bannerShadow && document.body.contains(bannerHost)) {
     return bannerShadow
   }
@@ -119,20 +201,14 @@ function ensureBannerHost(anchorElement: HTMLElement): ShadowRoot {
   if (bannerHost) bannerHost.remove()
 
   bannerHost = document.createElement('shieldai-banner')
-  bannerHost.style.cssText = 'display:block;width:100%;'
   bannerShadow = bannerHost.attachShadow({ mode: 'closed' })
 
   const style = document.createElement('style')
   style.textContent = BANNER_STYLES
   bannerShadow.appendChild(style)
 
-  // Insertar después del form/container del input
-  const container = getFormContainer(anchorElement)
-  if (container?.parentElement) {
-    container.parentElement.insertBefore(bannerHost, container.nextSibling)
-  } else {
-    anchorElement.parentElement?.insertBefore(bannerHost, anchorElement.nextSibling)
-  }
+  // Insertar en document.body como toast flotante
+  document.body.appendChild(bannerHost)
 
   return bannerShadow
 }
@@ -162,8 +238,19 @@ export function updateBanner(
   const existing = shadow.querySelector('.banner')
   if (existing) existing.remove()
 
+  const riskLevel = result.riskLevel as string
+  const colors = RISK_COLORS[riskLevel] ?? RISK_COLORS.medium
+
   const banner = document.createElement('div')
-  banner.className = `banner risk-${result.riskLevel}`
+  banner.className = `banner risk-${riskLevel}`
+  banner.style.cssText = `
+    background: ${colors.bg};
+    border-left-color: ${colors.border};
+    border-top: 1px solid ${colors.bg};
+    border-right: 1px solid ${colors.bg};
+    border-bottom: 1px solid ${colors.bg};
+    color: ${colors.text};
+  `
 
   // Resumen: "2 DNI, 1 IBAN"
   const counts = new Map<string, number>()
@@ -176,9 +263,9 @@ export function updateBanner(
   }
 
   banner.innerHTML = `
-    <span class="icon">\u26A0\uFE0F</span>
+    <span class="icon">${shieldSvg(colors.icon)}</span>
     <span class="content">
-      <span class="text">Datos sensibles detectados: </span>
+      <span class="text">ShieldAI detectó: </span>
       <span class="details">${parts.join(', ')}</span>
     </span>
   `
@@ -188,6 +275,10 @@ export function updateBanner(
     const acceptBtn = document.createElement('button')
     acceptBtn.className = 'btn-accept'
     acceptBtn.textContent = 'Enviar de todos modos'
+    acceptBtn.style.cssText = `
+      color: ${colors.text};
+      border-color: ${colors.border};
+    `
     banner.appendChild(acceptBtn)
 
     currentOnAccept = callbacks.onAcceptRisk
@@ -205,10 +296,22 @@ export function updateBanner(
 export function removeBanner(): void {
   removeBlockStyle()
   currentOnAccept = null
-  if (bannerHost) {
-    bannerHost.remove()
-    bannerHost = null
-    bannerShadow = null
+  if (bannerHost && bannerShadow) {
+    const banner = bannerShadow.querySelector('.banner')
+    if (banner) {
+      banner.classList.add('removing')
+      setTimeout(() => {
+        if (bannerHost) {
+          bannerHost.remove()
+          bannerHost = null
+          bannerShadow = null
+        }
+      }, 150)
+    } else {
+      bannerHost.remove()
+      bannerHost = null
+      bannerShadow = null
+    }
   }
 }
 

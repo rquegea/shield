@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { corsHeaders, corsPreflightResponse } from '@/lib/cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS() {
+  return corsPreflightResponse()
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/selectors — Selectores CSS de plataformas (público, sin auth)
@@ -15,8 +20,8 @@ export async function GET() {
     .select('platform, selectors, version, updated_at')
 
   if (error) {
-    return NextResponse.json({ error: 'Error al obtener selectores' }, { status: 500 })
+    return corsHeaders(NextResponse.json({ error: 'Error al obtener selectores' }, { status: 500 }))
   }
 
-  return NextResponse.json({ selectors })
+  return corsHeaders(NextResponse.json({ selectors }))
 }

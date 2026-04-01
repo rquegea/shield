@@ -7,7 +7,9 @@
     "dev": "webpack --mode development --watch"
   },
   "dependencies": {
-    "@shieldai/detectors": "*"
+    "@shieldai/detectors": "*",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^3.11.174"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.38",

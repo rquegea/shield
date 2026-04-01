@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { corsHeaders, corsPreflightResponse } from '@/lib/cors'
+
+export async function OPTIONS() {
+  return corsPreflightResponse()
+}
 
 const DEFAULT_POLICY = {
   mode: 'warn' as const,
@@ -16,7 +21,7 @@ const DEFAULT_POLICY = {
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Token requerido' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Token requerido' }, { status: 401 }))
   }
 
   const token = authHeader.slice(7)
@@ -30,11 +35,11 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (userError || !user) {
-    return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Token inválido' }, { status: 401 }))
   }
 
   if (!user.is_active) {
-    return NextResponse.json({ error: 'Usuario desactivado' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Usuario desactivado' }, { status: 401 }))
   }
 
   // Organización
@@ -45,7 +50,7 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (orgError || !org) {
-    return NextResponse.json({ error: 'Organización no encontrada' }, { status: 500 })
+    return corsHeaders(NextResponse.json({ error: 'Organización no encontrada' }, { status: 500 }))
   }
 
   // Resolver policy: primero por group_name, luego applies_to='all'
@@ -89,9 +94,9 @@ export async function GET(request: NextRequest) {
       }
     : DEFAULT_POLICY
 
-  return NextResponse.json({
+  return corsHeaders(NextResponse.json({
     organization: { name: org.name, slug: org.slug },
     policy: resolvedPolicy,
     user: { name: user.name, email: user.email, group_name: user.group_name },
-  })
+  }))
 }

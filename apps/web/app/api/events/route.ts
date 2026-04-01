@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { corsHeaders, corsPreflightResponse } from '@/lib/cors'
+
+export async function OPTIONS() {
+  return corsPreflightResponse()
+}
 
 // ---------------------------------------------------------------------------
 // POST /api/events — La extensión envía un evento (auth con extension_token)
@@ -9,7 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Token requerido' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Token requerido' }, { status: 401 }))
   }
 
   const token = authHeader.slice(7)
@@ -23,34 +28,34 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (userError || !user) {
-    return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Token inválido' }, { status: 401 }))
   }
 
   if (!user.is_active) {
-    return NextResponse.json({ error: 'Usuario desactivado' }, { status: 401 })
+    return corsHeaders(NextResponse.json({ error: 'Usuario desactivado' }, { status: 401 }))
   }
 
   // Validar body
   const body = await request.json().catch(() => null)
   if (!body) {
-    return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
+    return corsHeaders(NextResponse.json({ error: 'Body inválido' }, { status: 400 }))
   }
 
   const { platform, detection_types, detection_count, risk_level, action_taken, content_preview, user_accepted_risk, metadata } = body
 
   if (!platform || !detection_types || detection_count == null || !risk_level || !action_taken) {
-    return NextResponse.json({ error: 'Campos requeridos: platform, detection_types, detection_count, risk_level, action_taken' }, { status: 400 })
+    return corsHeaders(NextResponse.json({ error: 'Campos requeridos: platform, detection_types, detection_count, risk_level, action_taken' }, { status: 400 }))
   }
 
   const validRiskLevels = ['none', 'low', 'medium', 'high', 'critical']
   const validActions = ['blocked', 'warned_sent', 'warned_cancelled', 'monitored']
 
   if (!validRiskLevels.includes(risk_level)) {
-    return NextResponse.json({ error: `risk_level inválido. Valores: ${validRiskLevels.join(', ')}` }, { status: 400 })
+    return corsHeaders(NextResponse.json({ error: `risk_level inválido. Valores: ${validRiskLevels.join(', ')}` }, { status: 400 }))
   }
 
   if (!validActions.includes(action_taken)) {
-    return NextResponse.json({ error: `action_taken inválido. Valores: ${validActions.join(', ')}` }, { status: 400 })
+    return corsHeaders(NextResponse.json({ error: `action_taken inválido. Valores: ${validActions.join(', ')}` }, { status: 400 }))
   }
 
   // Insertar evento
@@ -72,10 +77,10 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (insertError) {
-    return NextResponse.json({ error: 'Error al guardar evento' }, { status: 500 })
+    return corsHeaders(NextResponse.json({ error: 'Error al guardar evento' }, { status: 500 }))
   }
 
-  return NextResponse.json({ id: event.id, created_at: event.created_at }, { status: 201 })
+  return corsHeaders(NextResponse.json({ id: event.id, created_at: event.created_at }, { status: 201 }))
 }
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ import { scanText, maskValue } from '@shieldai/detectors'
 import type { ScanResult, DetectorType } from '@shieldai/detectors'
 import type { ExtensionConfig, PlatformSelectors, EventPayload } from '../types'
 import { updateBanner, removeBanner, unblockButtons } from './ui/InlineBanner'
+import { initFileInterceptor } from './fileInterceptor'
 
 // ============================================================================
 // Estado global
@@ -31,12 +32,13 @@ let lastScanResult: ScanResult | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let lastPolledText: string = ''
 let pollingInterval: ReturnType<typeof setInterval> | null = null
+let isBlocked = false // Estado de bloqueo global
 
 const DEBOUNCE_MS = 500
 const PASTE_DELAY_MS = 100
 const POLLING_INTERVAL_MS = 2000
 
-// Selectores de fallback para ChatGPT (abril 2026)
+// Selectores de fallback por plataforma (abril 2026)
 const CHATGPT_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
     '#prompt-textarea',
@@ -51,6 +53,80 @@ const CHATGPT_FALLBACK_SELECTORS: PlatformSelectors = {
   ].join(', '),
   content_area: '[class*="markdown"]',
   input_container: 'form',
+}
+
+const GEMINI_FALLBACK_SELECTORS: PlatformSelectors = {
+  textarea: [
+    'rich-textarea .ql-editor',
+    '.ql-editor[contenteditable="true"]',
+    '[role="textbox"]',
+    'div[contenteditable="true"]',
+  ].join(', '),
+  submit_button: [
+    'button[aria-label*="Send"]',
+    'button[aria-label*="send"]',
+    'button.send-button',
+    'button[data-at="send"]',
+    'button[jsaction*="click"]',
+  ].join(', '),
+  content_area: '.response-container, .model-response, [role="article"]',
+  input_container: 'form, [role="region"]',
+}
+
+const CLAUDE_FALLBACK_SELECTORS: PlatformSelectors = {
+  textarea: [
+    'div.ProseMirror[contenteditable="true"]',
+    'div[contenteditable="true"]',
+    '[role="textbox"]',
+  ].join(', '),
+  submit_button: [
+    'button[aria-label*="Send"]',
+    'button[aria-label*="send"]',
+    'button[data-testid="send-message"]',
+  ].join(', '),
+  content_area: '[class*="Message"], .font-claude-message, [role="article"]',
+  input_container: '.composer-container, form, [role="region"]',
+}
+
+const PERPLEXITY_FALLBACK_SELECTORS: PlatformSelectors = {
+  textarea: [
+    'textarea[placeholder*="Ask"]',
+    'textarea',
+    '[role="textbox"]',
+  ].join(', '),
+  submit_button: [
+    'button[aria-label*="Submit"]',
+    'button[aria-label*="submit"]',
+    'button.bg-super',
+  ].join(', '),
+  content_area: '.prose, .markdown-content, [role="article"]',
+  input_container: 'form, [role="region"]',
+}
+
+const COPILOT_FALLBACK_SELECTORS: PlatformSelectors = {
+  textarea: [
+    'textarea#searchbox',
+    'cib-text-input textarea',
+    'textarea[id*="input"]',
+    'textarea',
+    '[role="textbox"]',
+  ].join(', '),
+  submit_button: [
+    'button[aria-label*="Submit"]',
+    'button[aria-label*="submit"]',
+    'button[aria-label*="Enviar"]',
+    'button[type="submit"]',
+  ].join(', '),
+  content_area: '.response-message, cib-message-group, [role="article"]',
+  input_container: 'form, .input-container, [role="region"]',
+}
+
+const PLATFORM_FALLBACK_SELECTORS: Record<string, PlatformSelectors> = {
+  chatgpt: CHATGPT_FALLBACK_SELECTORS,
+  gemini: GEMINI_FALLBACK_SELECTORS,
+  claude: CLAUDE_FALLBACK_SELECTORS,
+  perplexity: PERPLEXITY_FALLBACK_SELECTORS,
+  copilot: COPILOT_FALLBACK_SELECTORS,
 }
 
 // ============================================================================
@@ -71,13 +147,48 @@ function detectPlatform(): string {
 // Lectura del contenido del input
 // ============================================================================
 
-function getInputElement(): HTMLElement | null {
-  if (!selectors) return null
-  const selectorList = selectors.textarea.split(',').map((s) => s.trim())
-  for (const sel of selectorList) {
-    const el = document.querySelector<HTMLElement>(sel)
-    if (el) return el
+function findInputElementFallback(): HTMLElement | null {
+  // Estrategia 1: Buscar textarea visible
+  const textareas = Array.from(document.querySelectorAll<HTMLTextAreaElement>('textarea'))
+  for (const ta of textareas) {
+    if (ta.offsetHeight > 0 && getComputedStyle(ta).display !== 'none') {
+      return ta
+    }
   }
+
+  // Estrategia 2: Buscar contenteditable visible más grande (suele ser el input)
+  const editables = Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"]'))
+  let largestEditable: HTMLElement | null = null
+  let largestArea = 0
+  for (const el of editables) {
+    if (el.offsetHeight > 0 && getComputedStyle(el).display !== 'none') {
+      const area = el.offsetWidth * el.offsetHeight
+      if (area > largestArea) {
+        largestArea = area
+        largestEditable = el
+      }
+    }
+  }
+  return largestEditable
+}
+
+function getInputElement(): HTMLElement | null {
+  // Primero intentar con selectores específicos de la plataforma
+  if (selectors) {
+    const selectorList = selectors.textarea.split(',').map((s) => s.trim())
+    for (const sel of selectorList) {
+      const el = document.querySelector<HTMLElement>(sel)
+      if (el && el.offsetHeight > 0) return el
+    }
+  }
+
+  // Fallback: búsqueda genérica
+  const fallback = findInputElementFallback()
+  if (fallback) {
+    console.log('[ShieldAI] Input encontrado por fallback genérico:', fallback.tagName)
+    return fallback
+  }
+
   return null
 }
 
@@ -128,21 +239,56 @@ function buildPayload(
 // ============================================================================
 
 function findSubmitButton(): HTMLElement | null {
-  if (!selectors) return null
-  const selectorList = selectors.submit_button.split(',').map((s) => s.trim())
-  for (const sel of selectorList) {
-    const btn = document.querySelector<HTMLElement>(sel)
-    if (btn) return btn
+  // Estrategia 1: Selectores específicos de la plataforma
+  if (selectors) {
+    const selectorList = selectors.submit_button.split(',').map((s) => s.trim())
+    for (const sel of selectorList) {
+      const btn = document.querySelector<HTMLElement>(sel)
+      if (btn && btn.offsetHeight > 0) return btn
+    }
   }
 
-  // Fallback: cualquier button dentro del form del input
+  // Estrategia 2: Buscar dentro del form/container del input
   const input = getInputElement()
-  if (!input) return null
-  const form = input.closest('form')
-  if (!form) return null
-  // Buscar el último button (suele ser el de submit)
-  const buttons = form.querySelectorAll<HTMLElement>('button')
-  return buttons.length > 0 ? buttons[buttons.length - 1] : null
+  if (input) {
+    const form = input.closest('form')
+    if (form) {
+      // Buscar el último button visible (suele ser el de submit)
+      const buttons = Array.from(form.querySelectorAll<HTMLElement>('button')).filter(
+        (btn) => btn.offsetHeight > 0 && getComputedStyle(btn).display !== 'none',
+      )
+      if (buttons.length > 0) return buttons[buttons.length - 1]
+    }
+  }
+
+  // Estrategia 3: Búsqueda genérica de botones cerca del input
+  // Buscar en padres del input hasta encontrar un contenedor, luego buscar botones
+  if (input) {
+    let container = input.parentElement
+    for (let i = 0; i < 5; i++) {
+      if (!container) break
+      const buttons = Array.from(container.querySelectorAll<HTMLElement>('button')).filter(
+        (btn) => btn.offsetHeight > 0 && getComputedStyle(btn).display !== 'none',
+      )
+      // Priorizar botones con atributos que indiquen submit
+      const submitBtn = buttons.find(
+        (btn) =>
+          btn.getAttribute('aria-label')?.toLowerCase().includes('send') ||
+          btn.getAttribute('aria-label')?.toLowerCase().includes('enviar') ||
+          btn.getAttribute('data-testid')?.toLowerCase().includes('send') ||
+          btn.textContent?.toLowerCase().includes('send') ||
+          btn.textContent?.toLowerCase().includes('enviar'),
+      )
+      if (submitBtn) return submitBtn
+
+      // Si no hay botón específico, devolver el último (generalmente es submit)
+      if (buttons.length > 0) return buttons[buttons.length - 1]
+
+      container = container.parentElement
+    }
+  }
+
+  return null
 }
 
 function clickSubmitButton(): void {
@@ -169,17 +315,23 @@ function clickSubmitButton(): void {
 function handleAcceptRisk(): void {
   if (!lastScanResult?.hasMatches || !config) return
 
+  console.log('[ShieldAI] Usuario aceptó el riesgo, desbloqueando...')
+
   // Registrar el evento
   if (config.policyMode === 'warn') {
     sendEvent(buildPayload(lastScanResult, 'warned_sent', true))
   }
 
-  // Quitar banner y rehabilitar botones
+  // Desbloquear y permitir envío
+  isBlocked = false
+
+  // Quitar banner
   removeBanner()
   lastScanResult = null
 
   // Dar un tick para que el CSS se aplique y los botones se reactiven
   requestAnimationFrame(() => {
+    console.log('[ShieldAI] Haciendo click en el botón de submit...')
     clickSubmitButton()
   })
 }
@@ -209,14 +361,21 @@ function runRealtimeScan(): void {
 
   if (!result.hasMatches) {
     removeBanner()
+    isBlocked = false
+    console.log('[ShieldAI] Sin detecciones, desbloqueado')
     return
   }
 
   // ─── Modo monitor: solo registrar, no bloquear ───
   if (config?.policyMode === 'monitor') {
     // No mostrar banner ni bloquear botones
+    console.log('[ShieldAI] Modo monitor: solo registrar')
     return
   }
+
+  // ─── Modo block y warn: bloquear el envío ───
+  isBlocked = true
+  console.log('[ShieldAI] ⚠️ BLOQUEADO - Datos sensibles detectados:', result.summary)
 
   // ─── Modo block: banner sin botón de aceptar, botones deshabilitados ───
   // ─── Modo warn: banner con botón "Enviar de todos modos" ───
@@ -247,6 +406,7 @@ function checkForSentMessage(): void {
     sendEvent(buildPayload(lastScanResult, 'warned_sent', true))
     removeBanner()
     lastScanResult = null
+    isBlocked = false
   }
 
   lastInputText = text
@@ -277,6 +437,78 @@ function handleDropEvent(event: Event): void {
   setTimeout(runRealtimeScan, PASTE_DELAY_MS)
 }
 
+function isInBanner(element: HTMLElement): boolean {
+  // Verificar si el elemento está dentro del banner de ShieldAI
+  let el: HTMLElement | null = element
+  while (el) {
+    if (el.tagName === 'SHIELDAI-BANNER') return true
+    el = el.parentElement
+  }
+  return false
+}
+
+function handleClickEvent(event: Event): void {
+  // Si está bloqueado, prevenir clicks en botones de envío
+  if (!isBlocked) return
+  if (!(event.target instanceof HTMLElement)) return
+
+  const target = event.target as HTMLElement
+
+  // No bloquear clicks dentro del banner
+  if (isInBanner(target)) return
+
+  // Buscar si el click está en un botón (o dentro de uno)
+  const button = target.closest('button') || target.closest('[role="button"]')
+
+  if (button) {
+    console.log('[ShieldAI] ⛔ BLOQUEANDO click en botón:', button.textContent?.slice(0, 50))
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    return
+  }
+
+  // Si no es botón pero está bloqueado, podrías querer bloquear también otros clicks
+  // que podrían disparar el envío (como divs con listeners de click)
+}
+
+function handleKeydownEvent(event: KeyboardEvent): void {
+  // Si está bloqueado, prevenir Enter en textarea/input
+  if (!isBlocked) return
+  if (!(event.target instanceof HTMLElement)) return
+
+  // No bloquear si estamos dentro del banner
+  if (isInBanner(event.target)) return
+
+  const target = event.target as HTMLElement
+  const isInput = target instanceof HTMLTextAreaElement ||
+                  target instanceof HTMLInputElement ||
+                  target.getAttribute('contenteditable') === 'true' ||
+                  target.getAttribute('role') === 'textbox'
+
+  // Prevenir Enter en inputs cuando está bloqueado
+  if (isInput && (event.key === 'Enter' || event.keyCode === 13)) {
+    // Ctrl+Enter o Cmd+Enter normalmente envía
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      console.log('[ShieldAI] Enter bloqueado — esperando aprobación del usuario')
+    }
+  }
+}
+
+function handleSubmitEvent(event: Event): void {
+  // Si está bloqueado, prevenir submit de formularios
+  if (!isBlocked) return
+  if (!(event.target instanceof HTMLFormElement)) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
+  console.log('[ShieldAI] Submit bloqueado — esperando aprobación del usuario')
+}
+
 function startPolling(): void {
   if (pollingInterval !== null) return
   pollingInterval = setInterval(() => {
@@ -293,8 +525,11 @@ function attachAllListeners(): void {
   document.addEventListener('input', handleInputEvent, { capture: true })
   document.addEventListener('paste', handlePasteEvent, { capture: true })
   document.addEventListener('drop', handleDropEvent, { capture: true })
+  document.addEventListener('click', handleClickEvent, { capture: true })
+  document.addEventListener('keydown', handleKeydownEvent, { capture: true })
+  document.addEventListener('submit', handleSubmitEvent, { capture: true })
   startPolling()
-  console.log('[ShieldAI] Listeners registrados (input, paste, drop, polling)')
+  console.log('[ShieldAI] Listeners registrados (input, paste, drop, click, keydown, submit, polling)')
 }
 
 // ============================================================================
@@ -342,8 +577,8 @@ function startObserver(): void {
 async function init(): Promise<void> {
   platform = detectPlatform()
 
-  if (platform !== 'chatgpt') {
-    console.log(`[ShieldAI] Plataforma ${platform} no soportada aún`)
+  if (platform === 'unknown') {
+    console.log('[ShieldAI] Plataforma desconocida, no se inicializa')
     return
   }
 
@@ -371,12 +606,15 @@ async function init(): Promise<void> {
   }
 
   if (!selectors) {
-    console.log('[ShieldAI] Usando selectores de fallback para ChatGPT')
-    selectors = CHATGPT_FALLBACK_SELECTORS
+    selectors = PLATFORM_FALLBACK_SELECTORS[platform] ?? null
+    if (selectors) console.log(`[ShieldAI] Usando selectores de fallback para ${platform}`)
   }
 
   attachAllListeners()
   startObserver()
+
+  // Inicializar file interceptor
+  await initFileInterceptor(config, platform)
 
   console.log('[ShieldAI] Interceptor activo en', platform)
 }
