@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 // ---------------------------------------------------------------------------
 // GET /api/selectors — Selectores CSS de plataformas (público, sin auth)
 // ---------------------------------------------------------------------------
