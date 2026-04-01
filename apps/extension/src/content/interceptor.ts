@@ -26,8 +26,12 @@ let platform: string = 'unknown'
 let isProcessing = false
 let lastScanResult: ScanResult | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let lastPolledText: string = ''
+let pollingInterval: ReturnType<typeof setInterval> | null = null
 
 const DEBOUNCE_MS = 500
+const PASTE_DELAY_MS = 100
+const POLLING_INTERVAL_MS = 2000
 
 // Selectores de fallback para ChatGPT (abril 2026)
 // Orden: más específico primero. Se prueban secuencialmente.
@@ -182,6 +186,51 @@ function handleInputEvent(event: Event): void {
   debouncedScan()
 }
 
+// Listener de paste — contenteditable no siempre dispara 'input' en paste
+function handlePasteEvent(event: Event): void {
+  if (!config?.enabled) return
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return
+  if (!isInsideInput(target)) return
+
+  // Esperar a que el contenido pegado se inserte en el DOM
+  setTimeout(runRealtimeScan, PASTE_DELAY_MS)
+}
+
+// Listener de drop — drag & drop de texto al textarea
+function handleDropEvent(event: Event): void {
+  if (!config?.enabled) return
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return
+  if (!isInsideInput(target)) return
+
+  setTimeout(runRealtimeScan, PASTE_DELAY_MS)
+}
+
+// Polling cada 2s — safety net para menú contextual "Pegar", autocompletado, etc.
+function startPolling(): void {
+  if (pollingInterval !== null) return
+
+  pollingInterval = setInterval(() => {
+    if (!config?.enabled) return
+
+    const text = getInputText()
+
+    // Solo escanear si el texto cambió desde el último poll
+    if (text === lastPolledText) return
+    lastPolledText = text
+
+    runRealtimeScan()
+  }, POLLING_INTERVAL_MS)
+}
+
+function stopPolling(): void {
+  if (pollingInterval !== null) {
+    clearInterval(pollingInterval)
+    pollingInterval = null
+  }
+}
+
 // ============================================================================
 // CAPA 2: Interceptación del submit (modal de confirmación)
 // ============================================================================
@@ -330,15 +379,19 @@ function handleFormSubmit(event: SubmitEvent): void {
 
 function attachAllListeners(): void {
   // CAPA 1: detección en tiempo real
-  // 'input' event burbujea desde contenteditable y textarea
   document.addEventListener('input', handleInputEvent, { capture: true })
+  document.addEventListener('paste', handlePasteEvent, { capture: true })
+  document.addEventListener('drop', handleDropEvent, { capture: true })
+
+  // Safety net: polling cada 2s para menú contextual, autocompletado, etc.
+  startPolling()
 
   // CAPA 2: interceptación del submit (3 vectores, todos en capturing)
   document.addEventListener('keydown', handleDocumentKeydown, { capture: true })
   document.addEventListener('click', handleDocumentClick, { capture: true })
   document.addEventListener('submit', handleFormSubmit, { capture: true })
 
-  console.log('[ShieldAI] Listeners registrados (input, keydown, click, submit)')
+  console.log('[ShieldAI] Listeners registrados (input, paste, drop, polling, keydown, click, submit)')
 }
 
 // ============================================================================
@@ -362,6 +415,7 @@ function startObserver(): void {
       console.log('[ShieldAI] Input de ChatGPT perdido (navegación SPA)')
       removeBanner()
       lastScanResult = null
+      lastPolledText = ''
     }
 
     lastInputFound = found
