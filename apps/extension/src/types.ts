@@ -5,6 +5,9 @@ export interface ExtensionConfig {
   policyMode: 'warn' | 'block' | 'monitor'
   enabledDetectors: string[]
   whitelistPatterns: string[]
+  userEmail: string
+  companyDomains: string[]
+  whitelistDomains: string[]
 }
 
 export interface PlatformSelectors {

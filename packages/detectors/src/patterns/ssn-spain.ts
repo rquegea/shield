@@ -27,6 +27,7 @@ export function detectSsnSpain(text: string): Detection[] {
       end: match.index + raw.length,
       confidence: 'medium',
       category: 'PII',
+      severity: 'block',
     })
   }
 

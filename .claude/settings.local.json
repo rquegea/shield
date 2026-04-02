@@ -31,7 +31,11 @@
       "Bash(curl:*)",
       "Bash(lsof -i:3000)",
       "Bash(npm uninstall:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(node -e ':*)",
+      "Bash(npx tsx -e ':*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

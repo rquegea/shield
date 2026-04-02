@@ -27,6 +27,7 @@ export function detectPhoneSpain(text: string): Detection[] {
       end: match.index + raw.length,
       confidence: 'high',
       category: 'CONTACT',
+      severity: 'warn',
     })
   }
 
@@ -51,6 +52,7 @@ export function detectPhoneSpain(text: string): Detection[] {
       end: match.index + raw.length,
       confidence: 'medium',
       category: 'CONTACT',
+      severity: 'warn',
     })
   }
 

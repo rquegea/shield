@@ -5,11 +5,13 @@ export {
   type DetectorType,
   type RiskLevel,
   type Confidence,
+  type Severity,
   type Category,
   type Detection,
   type ScanResult,
   type ScanConfig,
   calculateRiskLevel,
+  calculateMaxSeverity,
   buildSummary,
 } from './types'
 
@@ -30,6 +32,11 @@ export { detectPlateSpain } from './patterns/plate-spain'
 export { detectNifPortugal } from './patterns/nif-portugal'
 export { detectCodiceFiscale } from './patterns/codice-fiscale'
 export { detectBirthdate } from './patterns/birthdate'
+export { detectHealthData } from './patterns/health-data'
+export { detectSalaryData } from './patterns/salary-data'
+export { detectPoliticalReligious } from './patterns/political-religious'
+export { detectCriminalData } from './patterns/criminal-data'
+export { detectCredentials } from './patterns/credentials'
 
 // Utilidad de enmascaramiento
 export function maskValue(value: string, visibleChars = 4): string {

@@ -21,6 +21,7 @@ export function detectPlateSpain(text: string): Detection[] {
       end: match.index + match[0].length,
       confidence: 'high',
       category: 'PII',
+      severity: 'warn',
     })
   }
 

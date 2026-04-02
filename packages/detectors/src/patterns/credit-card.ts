@@ -45,6 +45,7 @@ export function detectCreditCard(text: string): Detection[] {
       end: match.index + raw.length,
       confidence: isValid ? 'high' : 'medium',
       category: 'FINANCIAL',
+      severity: 'block',
     })
   }
 

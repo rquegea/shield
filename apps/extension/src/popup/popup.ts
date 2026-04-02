@@ -23,6 +23,9 @@ const connectBtn = document.getElementById('connect-btn') as HTMLButtonElement
 const toggleBtn = document.getElementById('toggle-btn') as HTMLButtonElement
 const dashboardBtn = document.getElementById('dashboard-btn') as HTMLButtonElement
 const feedbackEl = document.getElementById('feedback') as HTMLDivElement
+const domainTagsEl = document.getElementById('domain-tags') as HTMLDivElement
+const domainInput = document.getElementById('domain-input') as HTMLInputElement
+const addDomainBtn = document.getElementById('add-domain-btn') as HTMLButtonElement
 
 // --- Helpers de mensajes al service worker ---
 
@@ -133,6 +136,9 @@ function showConnected(config: ExtensionConfig, orgName: string, eventsToday: nu
   // Weekly chart
   renderWeeklyChart(weeklyData)
 
+  // Domain whitelist
+  renderDomainTags(config.companyDomains ?? [], config.whitelistDomains ?? [])
+
   // Show/hide sections
   infoSection.classList.remove('hidden')
   connectSection.classList.add('hidden')
@@ -168,6 +174,63 @@ function setConnecting(loading: boolean): void {
     statusPill.className = 'status-pill loading'
     statusText.textContent = 'Verificando conexión...'
   }
+}
+
+// --- Gestión de dominios whitelist ---
+
+function renderDomainTags(companyDomains: string[], whitelistDomains: string[]): void {
+  domainTagsEl.innerHTML = ''
+
+  // Company domains (no removibles, vienen del servidor)
+  for (const domain of companyDomains) {
+    const tag = document.createElement('span')
+    tag.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.25); border-radius: 6px; font-size: 11px; color: #60a5fa;'
+    tag.textContent = domain
+    domainTagsEl.appendChild(tag)
+  }
+
+  // Whitelist domains (removibles)
+  for (const domain of whitelistDomains) {
+    const tag = document.createElement('span')
+    tag.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; font-size: 11px; color: #94a3b8; cursor: default;'
+    tag.textContent = domain
+
+    const removeBtn = document.createElement('span')
+    removeBtn.textContent = '×'
+    removeBtn.style.cssText = 'cursor: pointer; font-size: 13px; line-height: 1; opacity: 0.7;'
+    removeBtn.addEventListener('click', () => removeDomain(domain))
+    tag.appendChild(removeBtn)
+
+    domainTagsEl.appendChild(tag)
+  }
+
+  if (companyDomains.length === 0 && whitelistDomains.length === 0) {
+    domainTagsEl.innerHTML = '<span style="font-size: 11px; color: #475569;">Ninguno configurado</span>'
+  }
+}
+
+async function addDomain(): Promise<void> {
+  const domain = domainInput.value.trim().toLowerCase().replace(/^@/, '')
+  if (!domain || !domain.includes('.')) return
+
+  const config = await sendMessage<ExtensionConfig>({ type: 'GET_CONFIG' })
+  const current = config.whitelistDomains ?? []
+  if (current.includes(domain) || (config.companyDomains ?? []).includes(domain)) {
+    domainInput.value = ''
+    return
+  }
+
+  const updated = [...current, domain]
+  await sendMessage({ type: 'UPDATE_WHITELIST_DOMAINS', domains: updated })
+  domainInput.value = ''
+  renderDomainTags(config.companyDomains ?? [], updated)
+}
+
+async function removeDomain(domain: string): Promise<void> {
+  const config = await sendMessage<ExtensionConfig>({ type: 'GET_CONFIG' })
+  const updated = (config.whitelistDomains ?? []).filter((d: string) => d !== domain)
+  await sendMessage({ type: 'UPDATE_WHITELIST_DOMAINS', domains: updated })
+  renderDomainTags(config.companyDomains ?? [], updated)
 }
 
 // --- Acciones ---
@@ -211,12 +274,19 @@ async function handleConnect(): Promise<void> {
 
   // Token válido — guardar config
   const config = await sendMessage<ExtensionConfig>({ type: 'GET_CONFIG' })
+  const userEmail = (result as Record<string, unknown>).userEmail as string ?? config.userEmail ?? ''
+  const emailDomain = userEmail ? userEmail.split('@')[1] : ''
+  const companyDomains = emailDomain
+    ? [...new Set([emailDomain, ...(config.companyDomains ?? [])])]
+    : config.companyDomains ?? []
   const updated: ExtensionConfig = {
     ...config,
     token,
     backendUrl,
     enabled: true,
     policyMode: (result.policyMode as ExtensionConfig['policyMode']) ?? config.policyMode,
+    userEmail,
+    companyDomains,
   }
   await chrome.storage.local.set({ config: updated })
 
@@ -270,6 +340,10 @@ async function loadAndRender(): Promise<void> {
 connectBtn.addEventListener('click', handleConnect)
 toggleBtn.addEventListener('click', handleToggle)
 dashboardBtn.addEventListener('click', handleDashboard)
+addDomainBtn.addEventListener('click', addDomain)
+domainInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addDomain()
+})
 
 // Enter en los inputs = conectar
 tokenInput.addEventListener('keydown', (e) => {

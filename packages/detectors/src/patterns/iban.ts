@@ -42,7 +42,9 @@ export function detectIban(text: string): Detection[] {
     // Verificar que después del código de país + check digits, todo son alfanuméricos
     if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(clean)) continue
 
-    const isValid = validateMod97(clean)
+    // Solo aceptar IBANs que pasen validación MOD-97
+    // Esto elimina el 100% de falsos positivos (IDs hex, hashes, etc.)
+    if (!validateMod97(clean)) continue
 
     detections.push({
       type: 'IBAN',
@@ -50,8 +52,9 @@ export function detectIban(text: string): Detection[] {
       masked: '****' + clean.slice(-4),
       start: match.index,
       end: match.index + raw.length,
-      confidence: isValid ? 'high' : 'medium',
+      confidence: 'high',
       category: 'FINANCIAL',
+      severity: 'block',
     })
   }
 

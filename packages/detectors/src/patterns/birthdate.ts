@@ -58,6 +58,7 @@ export function detectBirthdate(text: string): Detection[] {
       end: match.index + match[0].length,
       confidence,
       category: 'PII',
+      severity: 'warn',
     })
   }
 

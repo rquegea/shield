@@ -11,8 +11,11 @@ const DEFAULT_CONFIG: ExtensionConfig = {
   backendUrl: '',
   enabled: true,
   policyMode: 'warn',
-  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL', 'PASSPORT_SPAIN', 'NIF_PORTUGAL', 'CODICE_FISCALE', 'BIRTHDATE'],
+  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL', 'PASSPORT_SPAIN', 'NIF_PORTUGAL', 'CODICE_FISCALE', 'BIRTHDATE', 'HEALTH_DATA', 'SALARY_DATA', 'POLITICAL_RELIGIOUS', 'CRIMINAL_DATA', 'API_KEY', 'CONNECTION_STRING', 'JWT_TOKEN', 'ENV_SECRET', 'PRIVATE_KEY'],
   whitelistPatterns: [],
+  userEmail: '',
+  companyDomains: [],
+  whitelistDomains: [],
 }
 
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 horas
@@ -152,6 +155,8 @@ interface ServerConfigResponse {
   enabledDetectors?: string[]
   whitelistPatterns?: string[]
   orgName?: string
+  userEmail?: string
+  companyDomains?: string[]
 }
 
 async function syncConfig(): Promise<void> {
@@ -168,11 +173,21 @@ async function syncConfig(): Promise<void> {
     }
 
     const serverConfig = await response.json() as ServerConfigResponse
+    // Extraer dominio del email del usuario
+    const userEmail = serverConfig.userEmail ?? config.userEmail
+    const emailDomain = userEmail ? userEmail.split('@')[1] : ''
+    const serverDomains = serverConfig.companyDomains ?? []
+    const companyDomains = emailDomain
+      ? [...new Set([emailDomain, ...serverDomains])]
+      : serverDomains.length > 0 ? serverDomains : config.companyDomains
+
     const merged: ExtensionConfig = {
       ...config,
       policyMode: serverConfig.policyMode ?? config.policyMode,
       enabledDetectors: serverConfig.enabledDetectors ?? config.enabledDetectors,
       whitelistPatterns: serverConfig.whitelistPatterns ?? config.whitelistPatterns,
+      userEmail,
+      companyDomains,
     }
     await saveConfig(merged)
 
@@ -453,6 +468,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         })
       })
     })
+    return true
+  }
+
+  // Popup actualiza dominios de whitelist
+  if (message.type === 'UPDATE_WHITELIST_DOMAINS') {
+    const { domains } = message as { domains: string[]; type: string }
+    getConfig().then((config) => {
+      const updated = { ...config, whitelistDomains: domains }
+      return saveConfig(updated)
+    }).then(() => sendResponse({ ok: true }))
     return true
   }
 

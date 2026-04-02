@@ -18,6 +18,7 @@ export function detectPassportSpain(text: string): Detection[] {
       end: match.index + match[0].length,
       confidence: 'medium',
       category: 'ID_DOCUMENT',
+      severity: 'block',
     })
   }
 

@@ -12,12 +12,23 @@ export type DetectorType =
   | 'NIF_PORTUGAL'
   | 'CODICE_FISCALE'
   | 'BIRTHDATE'
+  | 'HEALTH_DATA'
+  | 'SALARY_DATA'
+  | 'POLITICAL_RELIGIOUS'
+  | 'CRIMINAL_DATA'
+  | 'API_KEY'
+  | 'CONNECTION_STRING'
+  | 'JWT_TOKEN'
+  | 'ENV_SECRET'
+  | 'PRIVATE_KEY'
 
 export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
 
 export type Confidence = 'high' | 'medium' | 'low'
 
-export type Category = 'PII' | 'FINANCIAL' | 'CONTACT' | 'ID_DOCUMENT'
+export type Severity = 'block' | 'warn' | 'info'
+
+export type Category = 'PII' | 'FINANCIAL' | 'CONTACT' | 'ID_DOCUMENT' | 'SPECIAL_CATEGORY' | 'CREDENTIAL' | 'INFRASTRUCTURE'
 
 export interface Detection {
   type: DetectorType
@@ -27,12 +38,14 @@ export interface Detection {
   end: number
   confidence: Confidence
   category: Category
+  severity: Severity
 }
 
 export interface ScanResult {
   hasMatches: boolean
   detections: Detection[]
   riskLevel: RiskLevel
+  maxSeverity: Severity | 'none'
   summary: string
 }
 
@@ -40,39 +53,50 @@ export interface ScanConfig {
   enabledDetectors: DetectorType[]
   whitelistPatterns: string[]
   sensitivityLevel: 'low' | 'medium' | 'high'
+  userEmail: string
+  companyDomains: string[]
+  whitelistDomains: string[]
 }
 
 /**
- * Calcula el riskLevel según las reglas:
- * - critical: >5 datos sensibles O presencia de tarjetas de crédito
- * - high: 2-5 datos sensibles O presencia de IBAN/DNI
- * - medium: 1 dato sensible
- * - low: detección con baja confianza
- * - none: sin detecciones
+ * Calcula el maxSeverity del array de detecciones.
+ * Orden: block > warn > info > none
+ */
+export function calculateMaxSeverity(detections: Detection[]): Severity | 'none' {
+  if (detections.length === 0) return 'none'
+  if (detections.some((d) => d.severity === 'block')) return 'block'
+  if (detections.some((d) => d.severity === 'warn')) return 'warn'
+  return 'info'
+}
+
+/**
+ * Calcula el riskLevel basado en severity:
+ * - Si alguna detección tiene severity block → critical (>5 o CC) / high
+ * - Solo warn → medium
+ * - Solo info → low
+ * - Sin detecciones → none
  */
 export function calculateRiskLevel(detections: Detection[]): RiskLevel {
   if (detections.length === 0) {
     return 'none'
   }
 
-  const hasCreditCard = detections.some((d) => d.type === 'CREDIT_CARD')
-  if (hasCreditCard || detections.length > 5) {
-    return 'critical'
-  }
+  const maxSev = calculateMaxSeverity(detections)
 
-  const hasIbanOrDni = detections.some(
-    (d) => d.type === 'IBAN' || d.type === 'DNI'
-  )
-  if (hasIbanOrDni || (detections.length >= 2 && detections.length <= 5)) {
+  if (maxSev === 'block') {
+    const hasCreditCard = detections.some((d) => d.type === 'CREDIT_CARD')
+    const blockCount = detections.filter((d) => d.severity === 'block').length
+    if (hasCreditCard || blockCount > 5) {
+      return 'critical'
+    }
     return 'high'
   }
 
-  const allLowConfidence = detections.every((d) => d.confidence === 'low')
-  if (allLowConfidence) {
-    return 'low'
+  if (maxSev === 'warn') {
+    return 'medium'
   }
 
-  return 'medium'
+  return 'low'
 }
 
 /**

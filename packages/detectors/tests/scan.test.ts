@@ -5,6 +5,7 @@ describe('scanText', () => {
   it('devuelve riskLevel none para texto sin datos sensibles', () => {
     const result = scanText('Hola, esto es un texto normal sin datos sensibles.')
     expect(result.riskLevel).toBe('none')
+    expect(result.maxSeverity).toBe('none')
     expect(result.detections).toHaveLength(0)
   })
 })

@@ -18,7 +18,7 @@
 import { scanText, maskValue } from '@shieldai/detectors'
 import type { ScanResult, DetectorType } from '@shieldai/detectors'
 import type { ExtensionConfig, PlatformSelectors, EventPayload } from '../types'
-import { updateBanner, removeBanner, unblockButtons } from './ui/InlineBanner'
+import { updateBanner, removeBanner, unblockButtons, updateInfoBanner } from './ui/InlineBanner'
 import { initFileInterceptor } from './fileInterceptor'
 import { startHealthCheck } from './healthCheck'
 
@@ -369,6 +369,9 @@ function runRealtimeScan(): void {
   const result = scanText(text, {
     enabledDetectors: (config?.enabledDetectors ?? []) as DetectorType[],
     whitelistPatterns: config?.whitelistPatterns ?? [],
+    userEmail: config?.userEmail ?? '',
+    companyDomains: config?.companyDomains ?? [],
+    whitelistDomains: config?.whitelistDomains ?? [],
   })
 
   lastScanResult = result
@@ -387,15 +390,37 @@ function runRealtimeScan(): void {
     return
   }
 
-  // ─── Modo block y warn: bloquear el envío ───
+  // ─── Severity info: banner informativo azul, sin bloquear nada ───
+  if (result.maxSeverity === 'info') {
+    isBlocked = false
+    console.log('[Guripa AI] ℹ️ Info - Detecciones de baja severidad:', result.summary)
+    updateInfoBanner(result, input, text)
+    return
+  }
+
+  // ─── Severity warn: banner naranja de warning, SIN bloquear botones ───
+  if (result.maxSeverity === 'warn') {
+    isBlocked = false
+    console.log('[Guripa AI] ⚠️ Warning - Datos sensibles detectados:', result.summary)
+    sendEvent(buildPayload(result, 'warned_sent', false))
+    updateBanner(result, input, {
+      onAcceptRisk: undefined,
+      mode: 'warn',
+      sourceText: text,
+    })
+    return
+  }
+
+  // ─── Severity block: bloquear el envío ───
   isBlocked = true
   console.log('[Guripa AI] ⚠️ BLOQUEADO - Datos sensibles detectados:', result.summary)
 
-  // ─── Modo block: banner sin botón de aceptar, botones deshabilitados ───
-  // ─── Modo warn: banner con botón "Enviar de todos modos" ───
+  // ─── Modo block de política: banner sin botón de aceptar, botones deshabilitados ───
+  // ─── Modo warn de política: banner con botón "Enviar de todos modos" ───
   const isBlock = config?.policyMode === 'block'
   updateBanner(result, input, {
     onAcceptRisk: isBlock ? undefined : handleAcceptRisk,
+    sourceText: text,
   })
 }
 

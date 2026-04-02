@@ -10,6 +10,7 @@
     "build": "npm run build --workspace=apps/web",
     "build:ext": "npm run build --workspace=apps/extension",
     "test": "npm test --workspace=packages/detectors",
-    "lint": "npm run lint --workspace=apps/web"
+    "lint": "npm run lint --workspace=apps/web",
+    "test:visual": "npm run dev --workspace=apps/test-runner"
   }
 }

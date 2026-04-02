@@ -461,6 +461,27 @@
         <div class="chart-days" id="chart-days"></div>
       </div>
 
+      <!-- Whitelist domains -->
+      <div class="card" id="whitelist-card">
+        <div class="card-label">Dominios permitidos</div>
+        <div class="card-sub" style="margin-bottom: 8px">Los emails de estos dominios no generarán alertas</div>
+        <div id="domain-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px"></div>
+        <div style="display: flex; gap: 6px">
+          <input type="text" id="domain-input" placeholder="ejemplo.com" style="
+            flex: 1;
+            padding: 6px 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            font-size: 12px;
+            color: #e2e8f0;
+            outline: none;
+            font-family: inherit;
+          ">
+          <button class="btn btn-outline" id="add-domain-btn" style="flex: none; padding: 6px 12px; font-size: 11px">Añadir</button>
+        </div>
+      </div>
+
       <!-- Buttons -->
       <div class="buttons">
         <button class="btn btn-outline" id="toggle-btn">Pausar protección</button>
