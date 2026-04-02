@@ -192,7 +192,11 @@ function getInputElement(): HTMLElement | null {
     const selectorList = selectors.textarea.split(',').map((s) => s.trim())
     for (const sel of selectorList) {
       const el = document.querySelector<HTMLElement>(sel)
-      if (el && el.offsetHeight > 0) return el
+      if (el && el.offsetHeight > 0) {
+        console.log(`[Guripa AI DEBUG] Selector encontrado: ${sel}`, el.tagName, el.id || el.className)
+        return el
+      }
+      console.log(`[Guripa AI DEBUG] Selector fallido: ${sel}`)
     }
   }
 
@@ -203,14 +207,18 @@ function getInputElement(): HTMLElement | null {
     return fallback
   }
 
+  console.log('[Guripa AI DEBUG] No se encontró ningún input')
   return null
 }
 
 function getInputText(): string {
   const el = getInputElement()
   if (!el) return ''
-  if (el instanceof HTMLTextAreaElement) return el.value
-  return el.innerText ?? ''
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+    return (el as HTMLInputElement).value
+  }
+  // contenteditable (Claude tiptap, ChatGPT ProseMirror, Gemini, etc.)
+  return el.innerText || el.textContent || ''
 }
 
 function isInsideInput(el: HTMLElement): boolean {
@@ -358,6 +366,9 @@ function runRealtimeScan(): void {
   const text = getInputText()
   const input = getInputElement()
 
+  console.log('[Guripa AI DEBUG] Texto leído:', JSON.stringify(text))
+  console.log('[Guripa AI DEBUG] Input element:', input?.tagName, input?.id || input?.className)
+
   if (!text.trim() || !input) {
     if (lastScanResult?.hasMatches) {
       removeBanner()
@@ -366,6 +377,9 @@ function runRealtimeScan(): void {
     return
   }
 
+  console.log('[Guripa AI DEBUG] enabledDetectors:', config?.enabledDetectors)
+  console.log('[Guripa AI DEBUG] policyMode:', config?.policyMode)
+
   const result = scanText(text, {
     enabledDetectors: (config?.enabledDetectors ?? []) as DetectorType[],
     whitelistPatterns: config?.whitelistPatterns ?? [],
@@ -373,6 +387,11 @@ function runRealtimeScan(): void {
     companyDomains: config?.companyDomains ?? [],
     whitelistDomains: config?.whitelistDomains ?? [],
   })
+
+  console.log('[Guripa AI DEBUG] Resultado scan:', result.hasMatches, 'detections:', result.detections.length, 'riskLevel:', result.riskLevel)
+  if (result.detections.length > 0) {
+    console.log('[Guripa AI DEBUG] Detecciones:', result.detections.map(d => `${d.type}: ${d.value}`))
+  }
 
   lastScanResult = result
 
@@ -593,13 +612,22 @@ function attachAllListeners(): void {
 // ============================================================================
 
 function isChatsendUrl(url: string): boolean {
-  // URLs de chat por plataforma
   const chatPatterns = [
-    /\/backend-api\/conversation/, // ChatGPT
-    /\/batchexecute/, // Gemini
-    /\/api\/.*\/chat/, // Claude
-    /\/api\/ask/, // Perplexity
-    /\/turing\/conversation/, // Copilot
+    // ChatGPT
+    /api\.openai\.com\/v1\/messages/,
+    /chatgpt\.com\/backend-api\/conversation/,
+    // Claude
+    /claude\.ai\/api\/organizations.*\/chat_conversations.*\/completion/,
+    /claude\.ai\/api\/append_message/,
+    // Gemini
+    /gemini\.google\.com.*\/BardChatUi/,
+    /generativelanguage\.googleapis\.com/,
+    // Copilot
+    /copilot\.microsoft\.com\/c\/api\/chat/,
+    /sydney\.bing\.com\/sydney\/ChatSydney/,
+    // Perplexity
+    /perplexity\.ai\/api\/ask/,
+    /perplexity\.ai\/socket\.io/,
   ]
   return chatPatterns.some((pattern) => pattern.test(url))
 }
@@ -711,6 +739,10 @@ function startObserver(): void {
 // ============================================================================
 
 async function init(): Promise<void> {
+  // Interceptar fetch/XHR desde el inicio — solo bloquean cuando isBlocked === true
+  interceptFetch()
+  interceptXHR()
+
   console.log('[Guripa AI] hostname:', window.location.hostname)
   platform = detectPlatform()
 
@@ -749,8 +781,6 @@ async function init(): Promise<void> {
 
   attachAllListeners()
   startObserver()
-  interceptFetch()
-  interceptXHR()
 
   // Inicializar file interceptor
   await initFileInterceptor(config, platform)

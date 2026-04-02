@@ -29,12 +29,27 @@ const NOT_NAMES = new Set([
   'Semana', 'Santa', 'Opus', 'Dei',
 ])
 
+/**
+ * Normaliza texto a Title Case (primera letra mayúscula, resto minúscula)
+ * para que la regex de nombres propios pueda detectar "maria garcia" → "Maria Garcia"
+ * Preserva la longitud exacta del texto para mapear posiciones 1:1.
+ */
+function toTitleCaseForMatching(text: string): string {
+  return text.replace(/\b([a-záéíóúñA-ZÁÉÍÓÚÑ])([a-záéíóúñA-ZÁÉÍÓÚÑ]*)\b/g, (_match, first: string, rest: string) => {
+    return first.toUpperCase() + rest.toLowerCase()
+  })
+}
+
 export function findNames(text: string): NameMatch[] {
   const matches: NameMatch[] = []
+  const normalized = toTitleCaseForMatching(text)
+
+  console.log('[NAME DEBUG] texto original:', text.slice(0, 50))
+  console.log('[NAME DEBUG] texto normalizado:', normalized.slice(0, 50))
 
   NAME_REGEX.lastIndex = 0
   let match: RegExpExecArray | null
-  while ((match = NAME_REGEX.exec(text)) !== null) {
+  while ((match = NAME_REGEX.exec(normalized)) !== null) {
     const words = [match[1], match[2], match[3], match[4]].filter(Boolean) as string[]
 
     // Al menos las 2 primeras palabras no deben ser de la lista de exclusión
@@ -45,11 +60,18 @@ export function findNames(text: string): NameMatch[] {
     if (realNameWords.length < 2) continue
 
     const fullName = words.join(' ')
+    // Devolver el texto original, no el normalizado
+    const originalValue = text.slice(match.index, match.index + fullName.length)
     matches.push({
-      name: fullName,
+      name: originalValue,
       start: match.index,
       end: match.index + fullName.length,
     })
+  }
+
+  console.log('[NAME DEBUG] matches encontrados:', matches.length)
+  if (matches.length > 0) {
+    console.log('[NAME DEBUG] nombres:', matches.map(m => m.name))
   }
 
   return matches

@@ -19,7 +19,7 @@ import { detectPoliticalReligious } from './patterns/political-religious'
 import { detectCriminalData } from './patterns/criminal-data'
 import { detectCredentials } from './patterns/credentials'
 
-const DETECTOR_MAP: Record<DetectorType, (text: string) => Detection[]> = {
+const DETECTOR_MAP: Partial<Record<DetectorType, (text: string) => Detection[]>> = {
   DNI: detectDni,
   NIE: detectNie,
   CIF: detectCif,

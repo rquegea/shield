@@ -3,8 +3,10 @@ import type { Detection, DetectorType } from '../types'
 // ─── API key prefixes ───
 
 const API_KEY_PREFIXES = [
-  'sk-', 'pk_', 'sk_live_', 'sk_test_', 'rk_', 'api_', 'key_', 'token_',
-  'ghp_', 'glpat-', 'xoxb-', 'xoxp-',
+  'sk-ant-', 'sk-proj-', 'sk-', 'pk_', 'sk_live_', 'sk_test_', 'rk_',
+  'api_', 'key_', 'token_',
+  'ghp_', 'gho_', 'ghs_', 'glpat-',
+  'xoxb-', 'xoxp-',
 ]
 
 // AWS key: AKIA + 16 alphanumeric
@@ -22,7 +24,11 @@ const PREFIX_KEY_REGEX = buildPrefixRegex()
 
 // ─── Connection strings ───
 
-const CONN_STRING_REGEX = /\b((?:postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|amqp|mssql):\/\/[^\s'")\]]+)/gi
+const CONN_STRING_REGEX = /\b((?:postgres|postgresql|mysql|mariadb|mongodb|mongodb\+srv|redis|rediss|amqp|rabbitmq|kafka|mssql):\/\/[^\s'")\]]+)/gi
+
+// ─── JDBC connection strings ───
+
+const JDBC_REGEX = /\b(jdbc:(?:mysql|postgresql|oracle|sqlserver|mariadb):[^\s'")\]]+)/gi
 
 // ─── JWT tokens ───
 // Three base64url segments separated by dots, each segment >= 10 chars
@@ -83,6 +89,12 @@ export function detectCredentials(text: string): Detection[] {
   // Connection strings
   CONN_STRING_REGEX.lastIndex = 0
   while ((m = CONN_STRING_REGEX.exec(text)) !== null) {
+    add('CONNECTION_STRING', m[1], m.index, m.index + m[1].length)
+  }
+
+  // JDBC connection strings
+  JDBC_REGEX.lastIndex = 0
+  while ((m = JDBC_REGEX.exec(text)) !== null) {
     add('CONNECTION_STRING', m[1], m.index, m.index + m[1].length)
   }
 

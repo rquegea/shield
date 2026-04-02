@@ -3,12 +3,26 @@ import { hasNameNearby } from './shared/name-detector'
 
 // Keywords que indican datos salariales/nómina
 const SALARY_KEYWORDS = [
+  // Verbos directos
+  'cobra', 'cobrar', 'cobras', 'cobraba', 'gana', 'ganar', 'ganas',
+  'le pago', 'le pagamos', 'nos paga', 'pagar', 'percibe', 'percibir',
+  // Cantidades
+  'brutos', 'bruto', 'netos', 'neto', 'brutos anuales', 'netos anuales',
+  'brutos mensuales', 'netos mensuales', 'al mes', 'al año', 'anuales',
+  'mensuales', 'quincenales',
+  // Conceptos nómina
   'nómina', 'nomina', 'salario', 'sueldo', 'retribución', 'retribucion',
-  'salario bruto', 'salario neto', 'sueldo bruto', 'sueldo neto',
   'remuneración', 'remuneracion', 'compensación', 'compensacion',
-  'IRPF', 'retención', 'retencion', 'base imponible',
-  'complemento salarial', 'paga extra', 'plus de antigüedad',
+  'salario bruto', 'salario neto', 'sueldo bruto', 'sueldo neto',
+  'IRPF', 'retención', 'retencion', 'base imponible', 'base de cotización',
+  'complemento salarial', 'paga extra', 'pagas extra', 'plus de antigüedad',
   'incremento salarial', 'subida salarial', 'revisión salarial',
+  'variable', 'bonus', 'incentivo', 'incentivos', 'comisiones', 'comisión',
+  'dietas', 'gastos', 'tickets restaurante', 'ticket restaurante',
+  'coste empresa', 'coste total', 'paquete retributivo',
+  'banda salarial', 'rango salarial', 'horquilla salarial',
+  'cotización', 'seguridad social', 'cuota', 'tramo',
+  'finiquito', 'liquidación', 'indemnización',
 ]
 
 const SALARY_PATTERN = new RegExp(
@@ -17,6 +31,7 @@ const SALARY_PATTERN = new RegExp(
 )
 
 export function detectSalaryData(text: string): Detection[] {
+  console.log('[SALARY DEBUG] texto recibido:', text.slice(0, 80))
   const detections: Detection[] = []
   const seen = new Set<string>()
 

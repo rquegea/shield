@@ -24,7 +24,17 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 horas
 
 async function getConfig(): Promise<ExtensionConfig> {
   const { config } = await chrome.storage.local.get(['config'])
-  return (config as ExtensionConfig) ?? DEFAULT_CONFIG
+  if (!config) return DEFAULT_CONFIG
+
+  const stored = config as ExtensionConfig
+  // Migración: si enabledDetectors tiene menos de 15 elementos, resetear al default completo
+  if (!stored.enabledDetectors || stored.enabledDetectors.length < 15) {
+    stored.enabledDetectors = DEFAULT_CONFIG.enabledDetectors
+    await saveConfig(stored)
+    console.log('[Guripa AI] Migración: enabledDetectors actualizado a', stored.enabledDetectors.length, 'detectores')
+  }
+
+  return stored
 }
 
 async function saveConfig(config: ExtensionConfig): Promise<void> {
@@ -466,6 +476,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           reports[platform] = Date.now()
           chrome.storage.local.set({ lastHealthReport: reports })
         })
+      })
+    })
+    return true
+  }
+
+  // Popup pide resetear configuración
+  if (message.type === 'RESET_CONFIG') {
+    chrome.storage.local.clear().then(() => {
+      chrome.storage.local.set({ config: DEFAULT_CONFIG }).then(() => {
+        console.log('[Guripa AI] Configuración reseteada')
+        sendResponse({ ok: true })
       })
     })
     return true

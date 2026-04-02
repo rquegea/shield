@@ -187,11 +187,11 @@ const BANNER_STYLES = /* css */ `
     width: 100%;
     margin-top: 8px;
     padding: 8px 10px;
-    background: rgba(0,0,0,0.15);
+    background: #1e293b;
     border-radius: 6px;
     font-size: 11px;
     line-height: 1.6;
-    color: rgba(255,255,255,0.7);
+    color: #e2e8f0;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     word-break: break-word;
     max-height: 80px;
@@ -204,7 +204,7 @@ const BANNER_STYLES = /* css */ `
     border-bottom-width: 2px;
     border-bottom-style: solid;
     font-weight: 600;
-    color: rgba(255,255,255,0.9);
+    color: #ffffff;
     cursor: default;
     position: relative;
   }

@@ -5,22 +5,41 @@ import { hasNameNearby } from './shared/name-detector'
 const HEALTH_KEYWORDS = [
   // Diagnósticos / condiciones
   'diagnóstico', 'diagnostico', 'diagnosticado', 'diagnosticada',
-  'diabetes', 'cáncer', 'cancer', 'hipertensión', 'hipertension',
-  'depresión', 'depresion', 'ansiedad', 'esquizofrenia', 'bipolar',
+  'diabetes', 'azúcar', 'insulina', 'tiroides',
+  'cáncer', 'cancer', 'tumor', 'quimio', 'quimioterapia',
+  'hipertensión', 'hipertension',
+  'depresión', 'depresion', 'depre', 'ansiedad', 'ataque de ansiedad',
+  'esquizofrenia', 'bipolar',
   'VIH', 'HIV', 'SIDA', 'hepatitis', 'epilepsia', 'asma',
   'alzheimer', 'parkinson', 'esclerosis', 'fibromialgia',
   'trastorno', 'enfermedad', 'patología', 'patologia', 'síndrome', 'sindrome',
+  'corazón', 'corazon', 'tensión', 'tension', 'tensión alta',
+  'alergia', 'intolerancia', 'celiaco', 'celíaco',
+  'dolor crónico', 'dolor cronico', 'migraña', 'migrana',
+  // Salud mental coloquial
+  'nervios', 'mal de los nervios', 'los nervios', 'nervioso', 'nerviosa',
+  'agotado', 'agotada', 'quemado', 'quemada', 'burnout',
+  'estrés', 'estres', 'no puede más', 'no puede mas',
+  'desbordado', 'desbordada',
+  'pastillas', 'medicación', 'medicacion', 'terapia',
+  'psicólogo', 'psicologo', 'psiquiatra', 'médico', 'medico',
   // Tratamientos
-  'tratamiento', 'medicación', 'medicacion', 'quimioterapia', 'radioterapia',
-  'cirugía', 'cirugia', 'operación', 'operacion', 'intervención', 'intervencion',
-  // Baja médica
-  'baja médica', 'baja medica', 'baja laboral', 'incapacidad temporal',
-  'incapacidad permanente', 'baja por enfermedad',
+  'tratamiento', 'radioterapia',
+  'cirugía', 'cirugia', 'operación', 'operacion', 'operar', 'operado', 'operada',
+  'intervención', 'intervencion',
+  'hospital', 'hospitalizado', 'hospitalizada', 'ingresado', 'ingresada',
+  'recuperándose', 'recuperandose', 'convaleciente',
+  // Bajas y ausencias
+  'baja', 'de baja', 'está de baja', 'sigue de baja', 'vuelve de baja',
+  'baja médica', 'baja medica', 'baja laboral', 'baja por enfermedad',
+  'incapacidad temporal', 'incapacidad permanente',
+  'no viene', 'no ha venido', 'lleva sin venir', 'ausente',
+  'parte de baja', 'parte médico', 'parte medico',
   // Estado de salud
   'historial clínico', 'historial clinico', 'historia clínica', 'historia clinica',
-  'informe médico', 'informe medico', 'parte de baja',
-  'discapacidad', 'minusvalía', 'minusvalia',
-  'embarazada', 'embarazo',
+  'informe médico', 'informe medico',
+  'discapacidad', 'minusvalía', 'minusvalia', 'grado de discapacidad',
+  'embarazada', 'embarazo', 'baja maternal', 'maternidad', 'paternidad',
 ]
 
 const HEALTH_PATTERN = new RegExp(

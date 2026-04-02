@@ -3,23 +3,35 @@ import { hasNameNearby } from './shared/name-detector'
 
 // Keywords que indican afiliación política, sindical, religiosa u orientación sexual
 const POLITICAL_RELIGIOUS_KEYWORDS = [
-  // Sindicatos
-  'delegado sindical', 'delegada sindical', 'afiliado a', 'afiliada a',
-  'afiliación sindical', 'afiliacion sindical', 'miembro de UGT', 'miembro de CCOO',
-  'miembro de CGT', 'representante sindical', 'comité de empresa',
+  // Sindicatos coloquial
+  'del sindicato', 'es del sindicato', 'sindicalista',
+  'delegado sindical', 'delegada sindical', 'representante sindical',
+  'comité de empresa', 'afiliado a', 'afiliada a',
+  'afiliación sindical', 'afiliacion sindical',
+  'miembro de UGT', 'miembro de CCOO', 'miembro de CGT',
+  'UGT', 'CCOO', 'CGT', 'USO', 'ELA', 'LAB', 'CIG',
+  'huelga', 'paro', 'manifestación',
   // Partidos políticos
-  'militante del', 'militante de', 'afiliado al', 'afiliada al',
-  'simpatizante de', 'votante de', 'miembro del',
-  // Religión
+  'militante', 'militante del', 'militante de',
+  'afiliado al', 'afiliada al', 'simpatizante', 'votante de',
+  'es del PP', 'es del PSOE', 'es de Vox', 'es de Podemos', 'es de Sumar', 'es de IU',
+  'PP', 'PSOE', 'Vox', 'Podemos', 'Sumar', 'IU', 'ERC', 'Junts', 'PNV',
+  // Religión coloquial
+  'es católico', 'es católica', 'es musulmán', 'es musulmana',
+  'es judío', 'es judía', 'practicante',
   'católico', 'catolico', 'católica', 'catolica',
   'musulmán', 'musulman', 'musulmana', 'protestante', 'evangélico', 'evangelico',
+  'evangelista',
   'judío', 'judio', 'judía', 'judia', 'budista', 'ateo', 'atea', 'agnóstico', 'agnostico',
-  'practicante', 'converso', 'conversa',
+  'converso', 'conversa',
+  'no come cerdo', 'lleva velo', 'ayuna', 'ramadán', 'ramadan',
   'testigo de Jehová', 'testigo de Jehova', 'mormón', 'mormon',
   // Orientación sexual
   'homosexual', 'heterosexual', 'bisexual', 'transexual', 'transgénero', 'transgenero',
-  'gay', 'lesbiana', 'no binario', 'no binaria', 'pansexual', 'asexual',
+  'gay', 'lesbiana', 'no binario', 'no binaria', 'pansexual', 'asexual', 'trans',
   'orientación sexual', 'orientacion sexual', 'identidad de género', 'identidad de genero',
+  'sale del armario', 'ha salido del armario',
+  'pareja del mismo sexo',
 ]
 
 const POLITICAL_PATTERN = new RegExp(

@@ -26,6 +26,7 @@ const feedbackEl = document.getElementById('feedback') as HTMLDivElement
 const domainTagsEl = document.getElementById('domain-tags') as HTMLDivElement
 const domainInput = document.getElementById('domain-input') as HTMLInputElement
 const addDomainBtn = document.getElementById('add-domain-btn') as HTMLButtonElement
+const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement
 
 // --- Helpers de mensajes al service worker ---
 
@@ -337,9 +338,15 @@ async function loadAndRender(): Promise<void> {
 
 // --- Event listeners ---
 
+async function handleReset(): Promise<void> {
+  await sendMessage({ type: 'RESET_CONFIG' })
+  window.location.reload()
+}
+
 connectBtn.addEventListener('click', handleConnect)
 toggleBtn.addEventListener('click', handleToggle)
 dashboardBtn.addEventListener('click', handleDashboard)
+resetBtn.addEventListener('click', handleReset)
 addDomainBtn.addEventListener('click', addDomain)
 domainInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addDomain()
