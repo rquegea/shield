@@ -78,6 +78,25 @@ export function scanText(text: string, config?: Partial<ScanConfig>): ScanResult
     detections.push(...credDetections.filter((d) => mergedConfig.enabledDetectors.includes(d.type)))
   }
 
+  // 1c. Deduplicación de overlaps: CREDIT_CARD vs IBAN
+  // Si un CREDIT_CARD se solapa con un IBAN, eliminar el CREDIT_CARD (mantener IBAN)
+  detections = detections.filter((d) => {
+    if (d.type !== 'CREDIT_CARD') return true
+
+    // Verificar si este CREDIT_CARD se solapa con algún IBAN
+    for (const other of detections) {
+      if (other.type === 'IBAN') {
+        // Comprobar overlap: d.start < other.end && d.end > other.start
+        const overlaps = d.start < other.end && d.end > other.start
+        if (overlaps) {
+          console.log(`[Guripa AI] Descartando CREDIT_CARD que se solapa con IBAN: ${d.value} vs ${other.value}`)
+          return false
+        }
+      }
+    }
+    return true
+  })
+
   // 2. Filtrar por sensitivityLevel
   const minConfidence = mergedConfig.sensitivityLevel === 'low' ? 2
     : mergedConfig.sensitivityLevel === 'medium' ? 1

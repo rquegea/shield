@@ -10,6 +10,22 @@ describe('scanText', () => {
     expect(result.maxSeverity).toBe('none')
     expect(result.detections).toHaveLength(0)
   })
+
+  it('IBAN no se detecta como CREDIT_CARD', () => {
+    // Test case: IBAN español válido (pasa mod97 validación)
+    const result = scanText('Mi IBAN es ES9121000418450200051332')
+    // Debería detectar IBAN, no CREDIT_CARD
+    expect(result.detections.some(d => d.type === 'IBAN')).toBe(true)
+    // No debería haber CREDIT_CARD (porque se solapa con IBAN)
+    expect(result.detections.some(d => d.type === 'CREDIT_CARD')).toBe(false)
+  })
+
+  it('IBAN con espacios no se detecta como CREDIT_CARD', () => {
+    // IBAN válido con espacios
+    const result = scanText('IBAN: ES91 2100 0418 4502 0005 1332')
+    expect(result.detections.some(d => d.type === 'IBAN')).toBe(true)
+    expect(result.detections.some(d => d.type === 'CREDIT_CARD')).toBe(false)
+  })
 })
 
 describe('Detectores con ventanas reducidas (strong vs weak keywords)', () => {

@@ -36,6 +36,49 @@ let lastPolledText: string = ''
 let pollingInterval: ReturnType<typeof setInterval> | null = null
 let isBlocked = false // Estado de bloqueo global
 
+// ============================================================================
+// API pública para fileInterceptor
+// ============================================================================
+
+/**
+ * Función pública: bloquea el envío con un banner visual.
+ * Usada cuando un archivo queda bloqueado sin dismiss automático.
+ * Aplica los mismos mecanismos que cuando se detectan datos sensibles.
+ */
+export function blockSending(reason: string = 'archivo bloqueado'): void {
+  isBlocked = true
+  const input = getInputElement()
+
+  if (input) {
+    // Crear un resultado dummy para mostrar un banner de bloqueo
+    const dummyResult: ScanResult = {
+      hasMatches: true,
+      detections: [],
+      riskLevel: 'critical',
+      maxSeverity: 'block',
+      summary: `Archivo ${reason}. Por favor, elimínalo antes de enviar.`,
+    }
+
+    console.log(`[Guripa AI] blockSending() — ${reason}`)
+    updateBanner(dummyResult, input, {
+      onAcceptRisk: undefined, // No permitir "enviar de todos modos"
+      sourceText: '',
+    })
+  } else {
+    console.log(`[Guripa AI] blockSending() — ${reason} (sin input encontrado)`)
+  }
+}
+
+/**
+ * Función pública: desbloquea el envío y quita el banner.
+ * Usada cuando el usuario elimina manualmente el archivo bloqueado.
+ */
+export function unblockSending(): void {
+  isBlocked = false
+  removeBanner()
+  console.log('[Guripa AI] unblockSending() — archivo eliminado')
+}
+
 const DEBOUNCE_MS = 500
 const PASTE_DELAY_MS = 100
 const POLLING_INTERVAL_MS = 2000
@@ -241,11 +284,7 @@ function getInputText(): string {
     return (el as HTMLInputElement).value
   }
   // contenteditable (Claude tiptap, ChatGPT ProseMirror, Gemini, etc.)
-  const text = el.innerText || el.textContent || ''
-  if (platform === 'gemini') {
-    console.log('[Guripa AI DEBUG] Gemini texto:', JSON.stringify(text.slice(0, 80)))
-  }
-  return text
+  return el.innerText || el.textContent || ''
 }
 
 function isInsideInput(el: HTMLElement): boolean {
@@ -396,6 +435,14 @@ function runRealtimeScan(): void {
   console.log('[Guripa AI DEBUG] Texto leído:', JSON.stringify(text))
   console.log('[Guripa AI DEBUG] Input element:', input?.tagName, input?.id || input?.className)
 
+  // ─── Chequear si hay un archivo bloqueado (por fileInterceptor) ───
+  const fileBlocked = (window as any).__guripaFileBlocked === true
+  if (fileBlocked) {
+    isBlocked = true
+    console.log('[Guripa AI] 📌 Archivo bloqueado (por fileInterceptor), isBlocked = true')
+    return
+  }
+
   if (!text.trim() || !input) {
     if (lastScanResult?.hasMatches) {
       removeBanner()
@@ -531,80 +578,50 @@ function handleDropEvent(event: Event): void {
   setTimeout(runRealtimeScan, PASTE_DELAY_MS)
 }
 
-function isInBanner(element: HTMLElement): boolean {
-  // Verificar si el elemento está dentro del banner de Guripa AI
-  let el: HTMLElement | null = element
-  while (el) {
-    if (el.tagName === 'SHIELDAI-BANNER') return true
-    el = el.parentElement
-  }
-  return false
-}
+function isClickOnSubmitButton(target: HTMLElement): boolean {
+  // Verificar si el click es específicamente en el botón de envío
+  // Permitir que sea un click en el botón mismo o dentro de él (por ej, en un icono dentro)
 
-function isNearInput(element: HTMLElement): boolean {
-  // Comprobar si el elemento clickeado está dentro del mismo contenedor que el input
-  const input = getInputElement()
-  if (!input) return false
+  const submitBtn = findSubmitButton()
+  if (!submitBtn) return false
 
-  // Subir hasta 8 niveles del elemento clickeado buscando un contenedor
-  let container = element.parentElement
-  for (let i = 0; i < 8; i++) {
-    if (!container) break
-    // Si encontramos el input o un ancestro del input, está "cerca"
-    if (container.contains(input) || container === input) return true
-    container = container.parentElement
-  }
-
-  return false
+  // Verificar si el target es el botón de submit o está dentro de él
+  return submitBtn === target || submitBtn.contains(target)
 }
 
 function handleClickEvent(event: Event): void {
-  // Si está bloqueado, prevenir clicks en botones de envío
+  // Solo bloquear si está bloqueado Y el click es en el botón de ENVÍO
   if (!isBlocked) return
   if (!(event.target instanceof HTMLElement)) return
 
   const target = event.target as HTMLElement
 
-  // No bloquear clicks dentro del banner
-  if (isInBanner(target)) return
-
-  // Buscar si el click está en un botón (o dentro de uno)
-  // Incluir [jsaction] para Gemini y otras plataformas
-  const button = target.closest('button') ||
-                 target.closest('[role="button"]') ||
-                 target.closest('[jsaction]')
-
-  if (button && isNearInput(button)) {
-    console.log('[Guripa AI] ⛔ BLOQUEANDO click en botón:', button.textContent?.slice(0, 50))
+  // Bloquear SOLO si el click es en el botón de submit
+  if (isClickOnSubmitButton(target)) {
+    console.log('[Guripa AI] ⛔ BLOQUEANDO click en botón de envío')
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
-    return
   }
 }
 
 function handleKeydownEvent(event: KeyboardEvent): void {
-  // Si está bloqueado, prevenir Enter en textarea/input
+  // Solo bloquear Enter en el textarea/input del mensaje cuando está bloqueado
   if (!isBlocked) return
   if (!(event.target instanceof HTMLElement)) return
-
-  // No bloquear si estamos dentro del banner
-  if (isInBanner(event.target)) return
+  if (event.key !== 'Enter' && event.keyCode !== 13) return
 
   const target = event.target as HTMLElement
-  const isInput = target instanceof HTMLTextAreaElement ||
-                  target instanceof HTMLInputElement ||
-                  target.getAttribute('contenteditable') === 'true' ||
-                  target.getAttribute('role') === 'textbox'
+  const inputElement = getInputElement()
 
-  // Prevenir TODO Enter excepto Shift+Enter (que es para nueva línea)
-  if (isInput && (event.key === 'Enter' || event.keyCode === 13)) {
-    // Permitir Shift+Enter para nueva línea
+  // Solo bloquear si es Enter en el textarea principal
+  if (target === inputElement || inputElement?.contains(target)) {
+    // Permitir Shift+Enter (nueva línea)
     if (!event.shiftKey) {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      console.log('[Guripa AI] Enter bloqueado — esperando aprobación del usuario')
+      console.log('[Guripa AI] Enter bloqueado en textarea — esperando aprobación del usuario')
     }
   }
 }

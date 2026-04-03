@@ -11,7 +11,7 @@ const DEFAULT_CONFIG: ExtensionConfig = {
   backendUrl: '',
   enabled: true,
   policyMode: 'warn',
-  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'SSN_SPAIN', 'PHONE_SPAIN', 'EMAIL', 'PASSPORT_SPAIN', 'NIF_PORTUGAL', 'CODICE_FISCALE', 'BIRTHDATE', 'HEALTH_DATA', 'SALARY_DATA', 'POLITICAL_RELIGIOUS', 'CRIMINAL_DATA', 'API_KEY', 'CONNECTION_STRING', 'JWT_TOKEN', 'ENV_SECRET', 'PRIVATE_KEY'],
+  enabledDetectors: ['DNI', 'NIE', 'CIF', 'IBAN', 'CREDIT_CARD', 'PHONE_SPAIN', 'EMAIL', 'API_KEY', 'CONNECTION_STRING', 'JWT_TOKEN', 'ENV_SECRET', 'PRIVATE_KEY'],
   whitelistPatterns: [],
   userEmail: '',
   companyDomains: [],
@@ -27,8 +27,8 @@ async function getConfig(): Promise<ExtensionConfig> {
   if (!config) return DEFAULT_CONFIG
 
   const stored = config as ExtensionConfig
-  // Migración: si enabledDetectors tiene menos de 15 elementos, resetear al default completo
-  if (!stored.enabledDetectors || stored.enabledDetectors.length < 15) {
+  // Migración: si enabledDetectors tiene menos de 12 elementos, resetear al default completo
+  if (!stored.enabledDetectors || stored.enabledDetectors.length < 12) {
     stored.enabledDetectors = DEFAULT_CONFIG.enabledDetectors
     await saveConfig(stored)
     console.log('[Guripa AI] Migración: enabledDetectors actualizado a', stored.enabledDetectors.length, 'detectores')

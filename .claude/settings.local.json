@@ -38,7 +38,10 @@
       "Bash(npx vite:*)",
       "Bash(GIT_SEQUENCE_EDITOR=\"sed -i '' 's/^pick 3813942/fixup 3813942/'\" git rebase:*)",
       "Bash(git stash:*)",
-      "Bash(npx webpack:*)"
+      "Bash(npx webpack:*)",
+      "Bash(node /tmp/test-iban-cc.js)",
+      "Bash(ls:*)",
+      "Bash(grep -r \"ES\" packages/detectors/tests/*.test.ts)"
     ]
   }
 }

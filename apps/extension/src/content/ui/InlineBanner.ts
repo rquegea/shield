@@ -483,23 +483,37 @@ export function removeBanner(): void {
   removeBlockStyle()
   currentOnAccept = null
   lastBannerResult = null
-  if (bannerHost && bannerShadow) {
-    const banner = bannerShadow.querySelector('.banner')
-    if (banner) {
-      banner.classList.add('removing')
-      setTimeout(() => {
-        if (bannerHost) {
-          bannerHost.remove()
-          bannerHost = null
-          bannerShadow = null
-        }
-      }, 150)
-    } else {
+
+  // Remover el bannerHost principal
+  if (bannerHost) {
+    try {
       bannerHost.remove()
-      bannerHost = null
-      bannerShadow = null
+    } catch (e) {
+      // Ignorar errores si ya fue removido
     }
+    bannerHost = null
+    bannerShadow = null
   }
+
+  // Limpiar TODOS los elementos residuales de banner en el DOM
+  const allBanners = document.querySelectorAll('shieldai-banner')
+  allBanners.forEach((el) => {
+    try {
+      el.remove()
+    } catch (e) {
+      // Ignorar errores
+    }
+  })
+
+  // Limpiar también modales residuales
+  const allModals = document.querySelectorAll('shieldai-modal')
+  allModals.forEach((el) => {
+    try {
+      el.remove()
+    } catch (e) {
+      // Ignorar errores
+    }
+  })
 }
 
 export function updateInfoBanner(
@@ -547,4 +561,72 @@ export function updateInfoBanner(
 
 export function unblockButtons(): void {
   removeBlockStyle()
+}
+
+// ─── Banner especializado para bloqueo de adjuntos ───
+
+export function blockFileAttachment(anchorElement: HTMLElement, filename?: string, onDismiss?: () => void): void {
+  // Limpiar completamente cualquier banner anterior
+  removeBlockStyle()
+  currentOnAccept = null
+  lastBannerResult = null
+  if (bannerHost) {
+    try {
+      bannerHost.remove()
+    } catch (e) {
+      // Ignorar errores
+    }
+    bannerHost = null
+    bannerShadow = null
+  }
+
+  // Crear nuevo banner
+  const shadow = ensureBannerHost(anchorElement)
+
+  const banner = document.createElement('div')
+  // Usar tema ID_DOCUMENT (naranja) para archivo bloqueado
+  const theme = getThemeForCategory('ID_DOCUMENT')
+  banner.className = 'banner'
+  banner.style.background = theme.gradient
+  banner.style.backgroundSize = '200% 200%'
+
+  // Header simple: solo icono + mensaje (sin contador de datos)
+  const header = document.createElement('div')
+  header.className = 'header'
+  const message = filename
+    ? `Descarta "${filename}" antes de enviar`
+    : 'Descarta el archivo antes de enviar'
+  header.innerHTML = `<span class="icon">${shieldSvg(theme.iconBg, theme.iconColor)}</span><span class="title" style="flex: 1;">${message}</span>`
+  banner.appendChild(header)
+
+  // Botón "Ya lo eliminé" si hay callback
+  if (onDismiss) {
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+    const dismissBtn = document.createElement('button')
+    dismissBtn.className = 'btn-accept'
+    dismissBtn.textContent = 'Ya lo eliminé'
+    dismissBtn.style.color = theme.btnColor
+    dismissBtn.style.border = `1px solid ${theme.btnBorder}`
+    dismissBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      onDismiss()
+    })
+    dismissBtn.addEventListener('mouseenter', () => {
+      dismissBtn.style.background = theme.btnHoverBg
+    })
+    dismissBtn.addEventListener('mouseleave', () => {
+      dismissBtn.style.background = 'transparent'
+    })
+    actions.appendChild(dismissBtn)
+    banner.appendChild(actions)
+  }
+
+  injectBlockStyle(anchorElement)
+
+  // Asegurar que no hay banner anterior
+  const existing = shadow.querySelector('.banner')
+  if (existing) existing.remove()
+
+  shadow.appendChild(banner)
 }
