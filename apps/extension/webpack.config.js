@@ -44,6 +44,7 @@ module.exports = (env, argv) => ({
         { from: 'src/popup/popup.html', to: 'popup/popup.html' },
         { from: 'src/content/styles.css', to: 'content/styles.css' },
         { from: 'icons', to: 'icons' },
+        { from: '../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', to: 'pdf.worker.min.mjs' },
       ],
     }),
   ],

@@ -31,6 +31,7 @@ let selectors: PlatformSelectors | null = null
 let platform: string = 'unknown'
 let lastScanResult: ScanResult | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let lastScannedText: string = '' // Último texto que fue realmente escaneado
 let lastPolledText: string = ''
 let pollingInterval: ReturnType<typeof setInterval> | null = null
 let isBlocked = false // Estado de bloqueo global
@@ -44,12 +45,15 @@ const CHATGPT_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
     '#prompt-textarea',
     'div.ProseMirror[contenteditable="true"]',
+    'div[id="prompt-textarea"][contenteditable="true"]',
+    'div[contenteditable="true"][data-placeholder]',
     'form textarea',
   ].join(', '),
   submit_button: [
     'button[data-testid="send-button"]',
     'button[aria-label="Send prompt"]',
     'button[aria-label="Enviar mensaje"]',
+    'button[aria-label="Send"]',
     'form button[type="submit"]',
   ].join(', '),
   content_area: '[class*="markdown"]',
@@ -58,14 +62,19 @@ const CHATGPT_FALLBACK_SELECTORS: PlatformSelectors = {
 
 const GEMINI_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
+    'div.ql-editor[contenteditable="true"]',
     'rich-textarea .ql-editor',
+    'rich-textarea div[contenteditable="true"]',
     '.ql-editor[contenteditable="true"]',
+    'div.input-area-container [contenteditable="true"]',
     '[role="textbox"]',
+    'div[contenteditable="true"][aria-label]',
     'div[contenteditable="true"]',
   ].join(', '),
   submit_button: [
     'button[aria-label*="Send"]',
     'button[aria-label*="send"]',
+    'button[aria-label*="Enviar"]',
     'button.send-button',
     'button[data-at="send"]',
     'button[jsaction*="click"]',
@@ -77,36 +86,40 @@ const GEMINI_FALLBACK_SELECTORS: PlatformSelectors = {
 const CLAUDE_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
     'div.ProseMirror[contenteditable="true"]',
+    'fieldset div[contenteditable="true"]',
+    'div[contenteditable="true"][translate="no"]',
     'div[contenteditable="true"]',
     '[role="textbox"]',
   ].join(', '),
   submit_button: [
     'button[aria-label*="Send"]',
     'button[aria-label*="send"]',
+    'button[aria-label*="Enviar"]',
     'button[data-testid="send-message"]',
+    'fieldset button[type="button"]',
   ].join(', '),
   content_area: '[class*="Message"], .font-claude-message, [role="article"]',
-  input_container: '.composer-container, form, [role="region"]',
+  input_container: 'fieldset, .composer-container, form, [role="region"]',
 }
 
 const PERPLEXITY_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
-    'textarea',
     'textarea[placeholder*="Ask"]',
+    'textarea[placeholder*="Follow"]',
+    'textarea[placeholder*="Pregunt"]',
+    'textarea',
     'div[contenteditable="true"]',
     '[role="textbox"]',
-    '.py-3 textarea',
     'input[type="text"]',
   ].join(', '),
   submit_button: [
     'button[aria-label*="submit" i]',
     'button[aria-label*="send" i]',
+    'button[aria-label*="enviar" i]',
     'button[type="submit"]',
     'button.bg-super',
     'button[data-testid*="send"]',
     'button[class*="submit"]',
-    'button:has-text("Search")',
-    '.input-group button',
   ].join(', '),
   content_area: '.prose, .markdown-content, [role="article"], .response',
   input_container: 'form, .input-group, .search-box, [role="region"]',
@@ -115,12 +128,12 @@ const PERPLEXITY_FALLBACK_SELECTORS: PlatformSelectors = {
 const COPILOT_FALLBACK_SELECTORS: PlatformSelectors = {
   textarea: [
     'textarea#searchbox',
+    'textarea[id*="userMessage"]',
+    'textarea[placeholder*="message" i]',
     'textarea',
     'cib-text-input textarea',
-    'textarea[id*="input"]',
     '[role="textbox"]',
     'div[contenteditable="true"]',
-    'textarea[placeholder*="Ask"]',
   ].join(', '),
   submit_button: [
     'button[aria-label*="submit" i]',
@@ -186,6 +199,8 @@ function findInputElementFallback(): HTMLElement | null {
   return largestEditable
 }
 
+let lastFoundSelector = ''
+
 function getInputElement(): HTMLElement | null {
   // Primero intentar con selectores específicos de la plataforma
   if (selectors) {
@@ -193,21 +208,29 @@ function getInputElement(): HTMLElement | null {
     for (const sel of selectorList) {
       const el = document.querySelector<HTMLElement>(sel)
       if (el && el.offsetHeight > 0) {
-        console.log(`[Guripa AI DEBUG] Selector encontrado: ${sel}`, el.tagName, el.id || el.className)
+        if (lastFoundSelector !== sel) {
+          console.log(`[Guripa AI] Input encontrado con selector: "${sel}"`, el.tagName, el.id || el.className)
+          lastFoundSelector = sel
+        }
         return el
       }
-      console.log(`[Guripa AI DEBUG] Selector fallido: ${sel}`)
     }
   }
 
   // Fallback: búsqueda genérica
   const fallback = findInputElementFallback()
   if (fallback) {
-    console.log('[Guripa AI] Input encontrado por fallback genérico:', fallback.tagName)
+    if (lastFoundSelector !== 'fallback') {
+      console.log('[Guripa AI] Input encontrado por fallback genérico:', fallback.tagName, fallback.id || fallback.className)
+      lastFoundSelector = 'fallback'
+    }
     return fallback
   }
 
-  console.log('[Guripa AI DEBUG] No se encontró ningún input')
+  if (lastFoundSelector !== '') {
+    console.log('[Guripa AI] Input perdido — ningún selector ni fallback encontró input visible')
+    lastFoundSelector = ''
+  }
   return null
 }
 
@@ -218,7 +241,11 @@ function getInputText(): string {
     return (el as HTMLInputElement).value
   }
   // contenteditable (Claude tiptap, ChatGPT ProseMirror, Gemini, etc.)
-  return el.innerText || el.textContent || ''
+  const text = el.innerText || el.textContent || ''
+  if (platform === 'gemini') {
+    console.log('[Guripa AI DEBUG] Gemini texto:', JSON.stringify(text.slice(0, 80)))
+  }
+  return text
 }
 
 function isInsideInput(el: HTMLElement): boolean {
@@ -374,8 +401,16 @@ function runRealtimeScan(): void {
       removeBanner()
     }
     lastScanResult = null
+    lastScannedText = ''
     return
   }
+
+  // Evitar scan redundante: si el texto es el mismo que el último escaneado, no hacer nada
+  if (text === lastScannedText) {
+    console.log('[Guripa AI DEBUG] Texto sin cambios, skipping scan')
+    return
+  }
+  lastScannedText = text
 
   console.log('[Guripa AI DEBUG] enabledDetectors:', config?.enabledDetectors)
   console.log('[Guripa AI DEBUG] policyMode:', config?.policyMode)
@@ -464,6 +499,7 @@ function checkForSentMessage(): void {
     sendEvent(buildPayload(lastScanResult, 'warned_sent', true))
     removeBanner()
     lastScanResult = null
+    lastScannedText = ''
     isBlocked = false
   }
 
@@ -588,6 +624,9 @@ function startPolling(): void {
   if (pollingInterval !== null) return
   pollingInterval = setInterval(() => {
     if (!config?.enabled) return
+    // Si hay un debounce pendiente, no hacer nada (el debounce se ejecutará en breve)
+    if (debounceTimer !== null) return
+
     const text = getInputText()
     if (text === lastPolledText) return
     lastPolledText = text
@@ -700,6 +739,28 @@ function interceptXHR(): void {
 // MutationObserver — detectar aparición/desaparición del input (SPA)
 // ============================================================================
 
+let inputContentObserver: MutationObserver | null = null
+
+function observeInputContent(input: HTMLElement): void {
+  // Desconectar observer previo si existe
+  if (inputContentObserver) {
+    inputContentObserver.disconnect()
+    inputContentObserver = null
+  }
+
+  // Observar cambios de contenido en el input (cubre cambios no originados por teclado)
+  inputContentObserver = new MutationObserver(() => {
+    if (!config?.enabled) return
+    debouncedScan()
+  })
+
+  inputContentObserver.observe(input, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  })
+}
+
 function startObserver(): void {
   let lastInputFound = false
 
@@ -709,12 +770,25 @@ function startObserver(): void {
 
     if (found && !lastInputFound) {
       console.log('[Guripa AI] Input encontrado:', input?.tagName, input?.id || input?.className)
+      // Observar cambios de contenido en el input
+      observeInputContent(input!)
+      // Escaneo inicial si el input ya tiene texto
+      const text = getInputText()
+      if (text.trim()) {
+        console.log('[Guripa AI] Texto preexistente detectado, escaneando...')
+        runRealtimeScan()
+      }
     } else if (!found && lastInputFound) {
       console.log('[Guripa AI] Input perdido (navegación SPA)')
       removeBanner()
       lastScanResult = null
+      lastScannedText = ''
       lastPolledText = ''
       lastInputText = ''
+      if (inputContentObserver) {
+        inputContentObserver.disconnect()
+        inputContentObserver = null
+      }
     }
 
     lastInputFound = found

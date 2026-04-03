@@ -1,124 +1,81 @@
 // InlineBanner — banner de aviso + bloqueo del botón de submit
 // Usa Shadow DOM para no interferir con los estilos de la plataforma
 //
-// Cuando hay datos sensibles:
-//   1. Inyecta CSS que deshabilita TODOS los botones dentro del form
-//      (opacity 0.5, pointer-events: none)
-//   2. Muestra un banner con el resumen + botón "Enviar de todos modos"
-//   3. Si el usuario acepta, rehabilita los botones y hace click en submit
-//
-// Cuando el texto queda limpio: quita el banner y rehabilita los botones.
+// Colores dinámicos por categoría de detección
 
-import type { ScanResult, Detection, Severity } from '@shieldai/detectors'
+import type { ScanResult, Detection } from '@shieldai/detectors'
+import {
+  getPrimaryTheme,
+  getThemeForCategory,
+  shieldSvg,
+  DETECTION_LABELS,
+  type CategoryTheme,
+} from './categoryTheme'
 
-// ─── Colores por nivel de riesgo ───
-
-const RISK_COLORS: Record<string, { bg: string; border: string; text: string; icon: string }> = {
-  critical: { bg: 'rgba(239,68,68,0.08)', border: '#ef4444', text: '#dc2626', icon: '#ef4444' },
-  high:     { bg: 'rgba(249,115,22,0.08)', border: '#f97316', text: '#ea580c', icon: '#f97316' },
-  medium:   { bg: 'rgba(234,179,8,0.08)',  border: '#eab308', text: '#ca8a04', icon: '#eab308' },
-  low:      { bg: 'rgba(34,197,94,0.08)',  border: '#22c55e', text: '#16a34a', icon: '#22c55e' },
-  info:     { bg: 'rgba(100,116,139,0.08)', border: '#64748b', text: '#475569', icon: '#64748b' },
-}
-
-// ─── Colores de highlight por severity ───
-
-const SEVERITY_HIGHLIGHT: Record<string, { bg: string; border: string }> = {
-  block: { bg: 'rgba(220, 38, 38, 0.15)', border: '#DC2626' },
-  warn:  { bg: 'rgba(245, 158, 11, 0.15)', border: '#F59E0B' },
-  info:  { bg: 'rgba(59, 130, 246, 0.12)', border: '#3B82F6' },
-}
-
-// ─── Nombres legibles por tipo de detección ───
-
-const DETECTION_LABELS: Record<string, string> = {
-  DNI: 'DNI',
-  NIE: 'NIE',
-  CIF: 'CIF',
-  IBAN: 'IBAN',
-  CREDIT_CARD: 'Tarjeta de crédito',
-  SSN_SPAIN: 'Nº Seguridad Social',
-  PHONE_SPAIN: 'Teléfono',
-  EMAIL: 'Email personal',
-  PASSPORT_SPAIN: 'Pasaporte',
-  PLATE_SPAIN: 'Matrícula',
-  NIF_PORTUGAL: 'NIF Portugal',
-  CODICE_FISCALE: 'Codice Fiscale',
-  BIRTHDATE: 'Fecha de nacimiento',
-  HEALTH_DATA: 'Dato de salud',
-  SALARY_DATA: 'Dato salarial',
-  POLITICAL_RELIGIOUS: 'Dato protegido Art. 9',
-  CRIMINAL_DATA: 'Dato penal',
-  API_KEY: 'API key',
-  CONNECTION_STRING: 'Connection string',
-  JWT_TOKEN: 'Token JWT',
-  ENV_SECRET: 'Secret en variable de entorno',
-  PRIVATE_KEY: 'Clave privada',
-}
-
-// ─── SVG del escudo (template) ───
-
-function shieldSvg(color: string): string {
-  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8 1L2 3.5v4.25C2 11.85 4.7 15 8 16c3.3-1 6-4.15 6-8.25V3.5L8 1z" fill="${color}" opacity="0.2" stroke="${color}" stroke-width="1" stroke-linejoin="round"/>
-    <path d="M5.5 8.5L7 10l3.5-3.5" stroke="${color}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </svg>`
-}
-
-// ─── Estilos del banner flotante (Shadow DOM) ───
+// ─── Estilos del banner (Shadow DOM) ───
 
 const BANNER_STYLES = /* css */ `
   :host {
     all: initial;
     position: fixed;
-    top: 12px;
-    right: 12px;
-    max-width: 420px;
+    top: 16px;
+    right: 16px;
+    width: 360px;
+    max-width: 360px;
     z-index: 2147483646;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.4;
+    font-family: 'Helvetica Neue', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+  }
+
+  @keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  @keyframes slideDownIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideUpOut {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-12px); }
+  }
+
+  @keyframes hlFlash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 
   .banner {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    font-size: 13px;
-    border-left-width: 4px;
-    border-left-style: solid;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    animation: slideDownIn 0.3s ease-out;
-    flex-wrap: wrap;
-  }
-
-  @keyframes slideDownIn {
-    from {
-      opacity: 0;
-      transform: translateY(-12px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideUpOut {
-    from {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    to   {
-      opacity: 0;
-      transform: translateY(-12px);
-    }
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 20px;
+    background-size: 200% 200%;
+    animation: slideDownIn 0.2s ease-out, gradientShift 4s ease-in-out infinite;
+    border: 1px solid rgba(200, 200, 220, 0.4);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    width: 360px;
+    max-width: 360px;
+    box-sizing: border-box;
+    overflow: visible;
   }
 
   .banner.removing {
-    animation: slideUpOut 0.2s ease-in forwards;
+    animation: slideUpOut 0.15s ease-in forwards;
+  }
+
+  /* Header: single row — icon + title + count */
+  .header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .icon {
@@ -127,144 +84,143 @@ const BANNER_STYLES = /* css */ `
     align-items: center;
   }
 
-  .content {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .text {
-    font-weight: 600;
-    font-size: 12px;
-  }
-
-  .details {
-    font-weight: 400;
-    opacity: 0.85;
-    font-size: 12px;
-  }
-
-  .btn-accept {
-    margin-left: auto;
-    padding: 5px 12px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    background: transparent;
+  .title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #1a1a2e;
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
-    font-family: inherit;
-    border-width: 1px;
-    border-style: solid;
-    line-height: 1.4;
   }
 
-  .btn-accept:hover {
-    background: rgba(239,68,68,0.1);
-  }
-
-  .btn-ok {
-    margin-left: auto;
-    padding: 5px 12px;
-    border-radius: 6px;
-    font-size: 11px;
+  .count {
     font-weight: 500;
-    cursor: pointer;
-    background: transparent;
+    font-size: 12px;
+    color: rgba(26, 26, 46, 0.6);
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
-    font-family: inherit;
-    border-width: 1px;
-    border-style: solid;
-    line-height: 1.4;
+    margin-left: auto;
   }
 
-  .btn-ok:hover {
-    background: rgba(100,116,139,0.1);
-  }
-
-  .preview {
+  /* Detection cards stacked vertically */
+  .det-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     width: 100%;
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: #1e293b;
-    border-radius: 6px;
-    font-size: 11px;
-    line-height: 1.6;
-    color: #e2e8f0;
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-    word-break: break-word;
-    max-height: 80px;
-    overflow-y: auto;
+    box-sizing: border-box;
   }
 
-  .preview .hl {
-    padding: 1px 3px;
-    border-radius: 3px;
-    border-bottom-width: 2px;
-    border-bottom-style: solid;
+  .det-preview {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    background: #ffffff;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #1a1a2e;
+    font-family: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .det-preview .hl {
+    text-underline-offset: 3px;
+    text-decoration-thickness: 2px;
     font-weight: 600;
-    color: #ffffff;
+    color: #1a1a2e;
     cursor: default;
-    position: relative;
   }
 
-  .preview .hl .tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e293b;
+  .det-preview .hl.flash {
+    animation: hlFlash 0.3s ease-in-out 3;
+  }
+
+  .det-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding-left: 4px;
+    font-size: 11px;
+    color: rgba(26, 26, 46, 0.65);
+    font-weight: 500;
+  }
+
+  .det-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tooltip-fixed {
+    position: fixed;
+    background: #0f172a;
     color: #e2e8f0;
     padding: 3px 8px;
     border-radius: 4px;
     font-size: 10px;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: inherit;
     white-space: nowrap;
-    z-index: 10;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    z-index: 2147483647;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     pointer-events: none;
+    transform: translateX(-50%);
   }
 
-  .preview .hl:hover .tooltip {
-    display: block;
+  /* Actions row */
+  .actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    width: 100%;
+    box-sizing: border-box;
+    padding-top: 2px;
   }
 
-  @keyframes hlFlash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
-  .preview .hl.flash {
-    animation: hlFlash 0.3s ease-in-out 3;
-  }
-
-  .detail-type {
+  .btn-accept {
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 2px;
+    background: transparent;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+    line-height: 1.4;
   }
 
-  .detail-type:hover {
-    opacity: 1;
+  .btn-ok {
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    background: transparent;
+    color: #64748b;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    white-space: nowrap;
+    transition: background 0.15s;
+    font-family: inherit;
+    line-height: 1.4;
   }
 
-  /* Mobile: stack vertically */
+  .btn-ok:hover {
+    background: rgba(100, 116, 139, 0.08);
+  }
+
   @media (max-width: 480px) {
     :host {
       left: 12px;
       right: 12px;
+      width: auto;
       max-width: none;
     }
     .banner {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .btn-accept {
-      margin-left: 26px;
-      margin-top: 4px;
+      width: auto;
+      max-width: none;
     }
   }
 `
@@ -274,11 +230,9 @@ const BANNER_STYLES = /* css */ `
 const BLOCK_STYLE_ID = 'shieldai-block-buttons'
 
 function getFormContainer(input: HTMLElement): HTMLElement | null {
-  // Primero intentar con <form>
   const form = input.closest('form')
   if (form) return form
 
-  // Si no hay form, subir hasta 10 niveles buscando un contenedor que tenga button o [role="button"]
   let container = input.parentElement
   for (let i = 0; i < 10; i++) {
     if (!container) break
@@ -287,18 +241,15 @@ function getFormContainer(input: HTMLElement): HTMLElement | null {
     container = container.parentElement
   }
 
-  // Fallback: parent del input
   return input.parentElement
 }
 
 function injectBlockStyle(input: HTMLElement): void {
   if (document.getElementById(BLOCK_STYLE_ID)) return
 
-  // Construir un selector CSS que apunte a los botones dentro del form
   const form = getFormContainer(input)
   if (!form) return
 
-  // Usamos un atributo marcador en el form para targetear con CSS
   form.setAttribute('data-shieldai-blocked', '1')
 
   const style = document.createElement('style')
@@ -320,7 +271,6 @@ function removeBlockStyle(): void {
   const style = document.getElementById(BLOCK_STYLE_ID)
   if (style) style.remove()
 
-  // Limpiar el atributo marcador de todos los forms
   document.querySelectorAll('[data-shieldai-blocked]').forEach((el) => {
     el.removeAttribute('data-shieldai-blocked')
   })
@@ -332,49 +282,33 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function buildPreviewHtml(text: string, detections: Detection[]): string {
-  if (detections.length === 0 || !text) return ''
+function buildSingleDetPreview(text: string, det: Detection, theme: CategoryTheme): string {
+  const pad = 20
+  const start = Math.max(0, det.start - pad)
+  const end = Math.min(text.length, det.end + pad)
+  const prefix = start > 0 ? '...' : ''
+  const suffix = end < text.length ? '...' : ''
 
-  // Ordenar detecciones por posición
-  const sorted = [...detections].sort((a, b) => a.start - b.start)
+  const before = escapeHtml(text.slice(start, det.start))
+  const match = escapeHtml(text.slice(det.start, det.end))
+  const after = escapeHtml(text.slice(det.end, end))
+  const label = DETECTION_LABELS[det.type] ?? det.type
 
-  // Extraer un fragmento de contexto alrededor de las detecciones
-  // Tomar desde 20 chars antes de la primera detección hasta 20 chars después de la última
-  const contextPad = 20
-  const firstStart = Math.max(0, sorted[0].start - contextPad)
-  const lastEnd = Math.min(text.length, sorted[sorted.length - 1].end + contextPad)
+  return `${prefix}${before}<span class="hl" style="text-decoration:underline;text-decoration-color:${theme.hlUnderline}" data-type="${det.type}" data-label="${label} detectado">${match}</span>${after}${suffix}`
+}
 
-  const fragment = text.slice(firstStart, lastEnd)
-  const prefix = firstStart > 0 ? '...' : ''
-  const suffix = lastEnd < text.length ? '...' : ''
+// ─── Comparación de detecciones ───
 
-  // Construir HTML con highlights
-  let html = ''
-  let cursor = firstStart
-
-  for (const det of sorted) {
-    if (det.start < cursor) continue // solapamiento
-
-    // Texto antes del highlight
-    if (det.start > cursor) {
-      html += escapeHtml(text.slice(cursor, det.start))
-    }
-
-    // El highlight
-    const hl = SEVERITY_HIGHLIGHT[det.severity] ?? SEVERITY_HIGHLIGHT.info
-    const label = DETECTION_LABELS[det.type] ?? det.type
-    const detectedText = text.slice(det.start, det.end)
-    html += `<span class="hl" data-type="${det.type}" style="background: ${hl.bg}; border-bottom-color: ${hl.border}"><span class="tooltip">${label} detectado</span>${escapeHtml(detectedText)}</span>`
-
-    cursor = det.end
+function detectionsEqual(a: Detection[], b: Detection[]): boolean {
+  if (a.length !== b.length) return false
+  // Comparar por tipo + valor (ignorar posición en el texto)
+  const aSet = new Set(a.map((d) => `${d.type}:${d.value}`))
+  const bSet = new Set(b.map((d) => `${d.type}:${d.value}`))
+  if (aSet.size !== bSet.size) return false
+  for (const item of aSet) {
+    if (!bSet.has(item)) return false
   }
-
-  // Texto después del último highlight
-  if (cursor < lastEnd) {
-    html += escapeHtml(text.slice(cursor, lastEnd))
-  }
-
-  return `${prefix}${html}${suffix}`
+  return true
 }
 
 // ─── Estado del banner ───
@@ -382,6 +316,7 @@ function buildPreviewHtml(text: string, detections: Detection[]): string {
 let bannerHost: HTMLElement | null = null
 let bannerShadow: ShadowRoot | null = null
 let currentOnAccept: (() => void) | null = null
+let lastBannerResult: ScanResult | null = null
 
 function ensureBannerHost(_anchorElement: HTMLElement): ShadowRoot {
   if (bannerHost && bannerShadow && document.body.contains(bannerHost)) {
@@ -397,18 +332,121 @@ function ensureBannerHost(_anchorElement: HTMLElement): ShadowRoot {
   style.textContent = BANNER_STYLES
   bannerShadow.appendChild(style)
 
-  // Insertar en document.body como toast flotante
   document.body.appendChild(bannerHost)
 
   return bannerShadow
 }
 
+// ─── Construcción del banner ───
+
+function buildBannerElement(
+  result: ScanResult,
+  sourceText: string | undefined,
+  onAcceptRisk: (() => void) | undefined,
+): HTMLDivElement {
+  const banner = document.createElement('div')
+  const theme = getPrimaryTheme(result.detections)
+  banner.className = 'banner'
+  banner.style.background = theme.gradient
+  banner.style.backgroundSize = '200% 200%'
+
+  const totalCount = result.detections.length
+
+  // Header row: icon + title + count
+  const header = document.createElement('div')
+  header.className = 'header'
+  header.innerHTML = `<span class="icon">${shieldSvg(theme.iconBg, theme.iconColor)}</span><span class="title">${theme.label}</span><span class="count">${totalCount} dato${totalCount !== 1 ? 's' : ''} detectado${totalCount !== 1 ? 's' : ''}</span>`
+  banner.appendChild(header)
+
+  // Detection cards — one per detection, grouped by dedup key, stacked vertically
+  if (sourceText) {
+    const seen = new Set<string>()
+    let activeTooltip: HTMLElement | null = null
+
+    for (const det of result.detections) {
+      const dedup = `${det.type}:${det.start}`
+      if (seen.has(dedup)) continue
+      seen.add(dedup)
+
+      const detTheme = getThemeForCategory(det.category)
+
+      const card = document.createElement('div')
+      card.className = 'det-card'
+
+      // Preview line
+      const preview = document.createElement('div')
+      preview.className = 'det-preview'
+      preview.innerHTML = buildSingleDetPreview(sourceText, det, detTheme)
+      card.appendChild(preview)
+
+      // Label line: dot + category + type
+      const label = document.createElement('div')
+      label.className = 'det-label'
+      const typeLabel = DETECTION_LABELS[det.type] ?? det.type
+      const labelText = detTheme.label === typeLabel ? detTheme.label : `${detTheme.label} &middot; ${typeLabel}`
+      label.innerHTML = `<span class="det-dot" style="background:${detTheme.dotColor}"></span>${labelText}`
+      card.appendChild(label)
+
+      banner.appendChild(card)
+
+      // JS tooltips
+      preview.querySelectorAll('.hl[data-label]').forEach((hl) => {
+        hl.addEventListener('mouseenter', () => {
+          const rect = (hl as HTMLElement).getBoundingClientRect()
+          const tip = document.createElement('div')
+          tip.className = 'tooltip-fixed'
+          tip.textContent = (hl as HTMLElement).dataset.label ?? ''
+          tip.style.left = `${rect.left + rect.width / 2}px`
+          tip.style.top = `${rect.top - 6}px`
+          tip.style.transform = 'translate(-50%, -100%)'
+          activeTooltip = tip
+          banner.getRootNode()?.appendChild(tip)
+        })
+        hl.addEventListener('mouseleave', () => {
+          if (activeTooltip) {
+            activeTooltip.remove()
+            activeTooltip = null
+          }
+        })
+      })
+    }
+  }
+
+  // Action button — color dinámico según tema principal
+  if (onAcceptRisk) {
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+    const acceptBtn = document.createElement('button')
+    acceptBtn.className = 'btn-accept'
+    acceptBtn.textContent = 'Enviar de todos modos'
+    acceptBtn.style.color = theme.btnColor
+    acceptBtn.style.border = `1px solid ${theme.btnBorder}`
+    currentOnAccept = onAcceptRisk
+    acceptBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (currentOnAccept) currentOnAccept()
+    })
+    acceptBtn.addEventListener('mouseenter', () => {
+      acceptBtn.style.background = theme.btnHoverBg
+    })
+    acceptBtn.addEventListener('mouseleave', () => {
+      acceptBtn.style.background = 'transparent'
+    })
+    actions.appendChild(acceptBtn)
+    banner.appendChild(actions)
+  } else {
+    currentOnAccept = null
+  }
+
+  return banner
+}
+
 // ─── API pública ───
 
 export interface BannerCallbacks {
-  onAcceptRisk?: () => void  // si es undefined o null, no se muestra el botón (modo block)
-  mode?: 'block' | 'warn'   // warn = banner naranja sin bloquear botones
-  sourceText?: string        // texto original para preview contextual
+  onAcceptRisk?: () => void
+  mode?: 'block' | 'warn'
+  sourceText?: string
 }
 
 export function updateBanner(
@@ -421,105 +459,30 @@ export function updateBanner(
     return
   }
 
+  // Optimización: si las detecciones son iguales al último resultado, no tocar el DOM
+  if (lastBannerResult && detectionsEqual(lastBannerResult.detections, result.detections)) {
+    console.log('[Guripa AI] Detecciones sin cambios, skipping banner update')
+    return
+  }
+  lastBannerResult = result
+
   const shadow = ensureBannerHost(anchorElement)
 
-  // Deshabilitar botones del form (solo si no es modo warn de severity)
   if (callbacks.mode !== 'warn') {
     injectBlockStyle(anchorElement)
   }
 
-  // Limpiar contenido previo (mantener <style>)
   const existing = shadow.querySelector('.banner')
   if (existing) existing.remove()
 
-  const riskLevel = result.riskLevel as string
-  const colors = RISK_COLORS[riskLevel] ?? RISK_COLORS.medium
-
-  const banner = document.createElement('div')
-  banner.className = `banner risk-${riskLevel}`
-  banner.style.cssText = `
-    background: ${colors.bg};
-    border-left-color: ${colors.border};
-    border-top: 1px solid ${colors.bg};
-    border-right: 1px solid ${colors.bg};
-    border-bottom: 1px solid ${colors.bg};
-    color: ${colors.text};
-  `
-
-  // Resumen: "2 DNI, 1 IBAN" — cada tipo es clickeable
-  const counts = new Map<string, number>()
-  for (const d of result.detections) {
-    counts.set(d.type, (counts.get(d.type) ?? 0) + 1)
-  }
-
-  banner.innerHTML = `
-    <span class="icon">${shieldSvg(colors.icon)}</span>
-    <span class="content">
-      <span class="text">Guripa AI detectó: </span>
-      <span class="details"></span>
-    </span>
-  `
-
-  // Crear spans clickeables para cada tipo
-  const detailsSpan = banner.querySelector('.details')!
-  const typeEntries = Array.from(counts.entries())
-  typeEntries.forEach(([type, count], i) => {
-    const typeSpan = document.createElement('span')
-    typeSpan.className = 'detail-type'
-    typeSpan.textContent = `${count} ${type}`
-    typeSpan.addEventListener('click', (e) => {
-      e.stopPropagation()
-      // Flash highlights of this type in preview
-      const highlights = banner.parentNode?.querySelectorAll(`.hl[data-type="${type}"]`)
-      highlights?.forEach((hl) => {
-        hl.classList.remove('flash')
-        void (hl as HTMLElement).offsetWidth // force reflow
-        hl.classList.add('flash')
-      })
-    })
-    detailsSpan.appendChild(typeSpan)
-    if (i < typeEntries.length - 1) {
-      detailsSpan.appendChild(document.createTextNode(', '))
-    }
-  })
-
-  // Preview contextual con highlights
-  if (callbacks.sourceText) {
-    const previewHtml = buildPreviewHtml(callbacks.sourceText, result.detections)
-    if (previewHtml) {
-      const previewDiv = document.createElement('div')
-      previewDiv.className = 'preview'
-      previewDiv.innerHTML = previewHtml
-      banner.appendChild(previewDiv)
-    }
-  }
-
-  // Botón "Enviar de todos modos" — solo si hay callback (modo warn)
-  if (callbacks.onAcceptRisk) {
-    const acceptBtn = document.createElement('button')
-    acceptBtn.className = 'btn-accept'
-    acceptBtn.textContent = 'Enviar de todos modos'
-    acceptBtn.style.cssText = `
-      color: ${colors.text};
-      border-color: ${colors.border};
-    `
-    banner.appendChild(acceptBtn)
-
-    currentOnAccept = callbacks.onAcceptRisk
-    acceptBtn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      if (currentOnAccept) currentOnAccept()
-    })
-  } else {
-    currentOnAccept = null
-  }
-
+  const banner = buildBannerElement(result, callbacks.sourceText, callbacks.onAcceptRisk)
   shadow.appendChild(banner)
 }
 
 export function removeBanner(): void {
   removeBlockStyle()
   currentOnAccept = null
+  lastBannerResult = null
   if (bannerHost && bannerShadow) {
     const banner = bannerShadow.querySelector('.banner')
     if (banner) {
@@ -539,7 +502,6 @@ export function removeBanner(): void {
   }
 }
 
-// Banner informativo (severity info) — azul/gris, solo OK para cerrar
 export function updateInfoBanner(
   result: ScanResult,
   anchorElement: HTMLElement,
@@ -550,75 +512,39 @@ export function updateInfoBanner(
     return
   }
 
+  // Optimización: si las detecciones son iguales al último resultado, no tocar el DOM
+  if (lastBannerResult && detectionsEqual(lastBannerResult.detections, result.detections)) {
+    console.log('[Guripa AI] Detecciones sin cambios, skipping info banner update')
+    return
+  }
+  lastBannerResult = result
+
   const shadow = ensureBannerHost(anchorElement)
 
-  // NO deshabilitar botones del form
   removeBlockStyle()
 
-  // Limpiar contenido previo (mantener <style>)
   const existing = shadow.querySelector('.banner')
   if (existing) existing.remove()
 
-  const colors = RISK_COLORS.info
+  // Info banner uses same pill design, just OK button instead of accept
+  const banner = buildBannerElement(result, sourceText, undefined)
 
-  const banner = document.createElement('div')
-  banner.className = 'banner risk-info'
-  banner.style.cssText = `
-    background: ${colors.bg};
-    border-left-color: ${colors.border};
-    border-top: 1px solid ${colors.bg};
-    border-right: 1px solid ${colors.bg};
-    border-bottom: 1px solid ${colors.bg};
-    color: ${colors.text};
-  `
-
-  // Resumen
-  const counts = new Map<string, number>()
-  for (const d of result.detections) {
-    counts.set(d.type, (counts.get(d.type) ?? 0) + 1)
-  }
-  const parts: string[] = []
-  for (const [type, count] of counts) {
-    parts.push(`${count} ${type}`)
-  }
-
-  banner.innerHTML = `
-    <span class="icon">${shieldSvg(colors.icon)}</span>
-    <span class="content">
-      <span class="text">Guripa AI: </span>
-      <span class="details">${parts.join(', ')}</span>
-    </span>
-  `
-
-  // Preview contextual con highlights
-  if (sourceText) {
-    const previewHtml = buildPreviewHtml(sourceText, result.detections)
-    if (previewHtml) {
-      const previewDiv = document.createElement('div')
-      previewDiv.className = 'preview'
-      previewDiv.innerHTML = previewHtml
-      banner.appendChild(previewDiv)
-    }
-  }
-
-  // Botón OK para cerrar
+  // Add OK button
+  const actions = document.createElement('div')
+  actions.className = 'actions'
   const okBtn = document.createElement('button')
   okBtn.className = 'btn-ok'
   okBtn.textContent = 'OK'
-  okBtn.style.cssText = `
-    color: ${colors.text};
-    border-color: ${colors.border};
-  `
   okBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     removeBanner()
   })
-  banner.appendChild(okBtn)
+  actions.appendChild(okBtn)
+  banner.appendChild(actions)
 
   shadow.appendChild(banner)
 }
 
-// Re-habilitar botones temporalmente (para el re-disparo del submit)
 export function unblockButtons(): void {
   removeBlockStyle()
 }

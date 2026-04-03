@@ -1,37 +1,47 @@
 import type { Detection } from '../types'
 import { hasNameNearby } from './shared/name-detector'
 
-// Keywords que indican datos penales/judiciales (Art. 10 RGPD)
-const CRIMINAL_KEYWORDS = [
+// Keywords específicos = alta confianza, ventana normal (150 chars)
+const STRONG_CRIMINAL_KEYWORDS = [
   'antecedentes penales', 'antecedentes policiales',
   'condena', 'condenado', 'condenada',
   'sentencia penal', 'sentencia firme',
-  'delito', 'imputado', 'imputada', 'investigado', 'investigada',
   'preso', 'presa', 'prisión', 'prision', 'encarcelado', 'encarcelada',
   'libertad condicional', 'libertad vigilada',
-  'orden de alejamiento', 'detención', 'detencion',
-  'detenido', 'detenida', 'procesado', 'procesada',
-  'acusado de', 'acusada de',
+  'orden de alejamiento',
   'ficha policial', 'expediente penal',
 ]
 
-const CRIMINAL_PATTERN = new RegExp(
-  `\\b(${CRIMINAL_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+// Keywords genéricos = baja confianza, ventana reducida (40 chars)
+const WEAK_CRIMINAL_KEYWORDS = [
+  'delito', 'imputado', 'imputada', 'investigado', 'investigada',
+  'detención', 'detencion',
+  'detenido', 'detenida', 'procesado', 'procesada',
+  'acusado de', 'acusada de',
+]
+
+const STRONG_CRIMINAL_PATTERN = new RegExp(
+  `\\b(${STRONG_CRIMINAL_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
   'gi'
 )
 
-export function detectCriminalData(text: string): Detection[] {
+const WEAK_CRIMINAL_PATTERN = new RegExp(
+  `\\b(${WEAK_CRIMINAL_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  'gi'
+)
+
+function scanCriminalKeywords(text: string, pattern: RegExp, windowSize: number): Detection[] {
   const detections: Detection[] = []
   const seen = new Set<string>()
 
-  CRIMINAL_PATTERN.lastIndex = 0
+  pattern.lastIndex = 0
   let match: RegExpExecArray | null
-  while ((match = CRIMINAL_PATTERN.exec(text)) !== null) {
+  while ((match = pattern.exec(text)) !== null) {
     const keyword = match[0]
     const keywordStart = match.index
     const keywordEnd = keywordStart + keyword.length
 
-    const nearbyName = hasNameNearby(text, keywordStart, keywordEnd)
+    const nearbyName = hasNameNearby(text, keywordStart, keywordEnd, windowSize)
     if (!nearbyName) continue
 
     const key = `${nearbyName.name}:${keyword.toLowerCase()}`
@@ -54,4 +64,22 @@ export function detectCriminalData(text: string): Detection[] {
   }
 
   return detections
+}
+
+export function detectCriminalData(text: string): Detection[] {
+  // Pasada 1: Keywords específicos con ventana normal (150)
+  const strongDetections = scanCriminalKeywords(text, STRONG_CRIMINAL_PATTERN, 150)
+
+  // Pasada 2: Keywords genéricos con ventana reducida (40)
+  const weakDetections = scanCriminalKeywords(text, WEAK_CRIMINAL_PATTERN, 40)
+
+  // Combinar, evitando duplicados por position
+  const allDetections = [...strongDetections, ...weakDetections]
+  const deduped = new Map<string, Detection>()
+  for (const det of allDetections) {
+    const key = `${det.start}:${det.end}`
+    deduped.set(key, det)
+  }
+
+  return Array.from(deduped.values())
 }

@@ -44,9 +44,6 @@ export function findNames(text: string): NameMatch[] {
   const matches: NameMatch[] = []
   const normalized = toTitleCaseForMatching(text)
 
-  console.log('[NAME DEBUG] texto original:', text.slice(0, 50))
-  console.log('[NAME DEBUG] texto normalizado:', normalized.slice(0, 50))
-
   NAME_REGEX.lastIndex = 0
   let match: RegExpExecArray | null
   while ((match = NAME_REGEX.exec(normalized)) !== null) {
@@ -67,11 +64,6 @@ export function findNames(text: string): NameMatch[] {
       start: match.index,
       end: match.index + fullName.length,
     })
-  }
-
-  console.log('[NAME DEBUG] matches encontrados:', matches.length)
-  if (matches.length > 0) {
-    console.log('[NAME DEBUG] nombres:', matches.map(m => m.name))
   }
 
   return matches

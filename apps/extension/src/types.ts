@@ -8,6 +8,7 @@ export interface ExtensionConfig {
   userEmail: string
   companyDomains: string[]
   whitelistDomains: string[]
+  fileDismissSelectors?: string[]
 }
 
 export interface PlatformSelectors {

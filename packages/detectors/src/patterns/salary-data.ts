@@ -1,48 +1,53 @@
 import type { Detection } from '../types'
 import { hasNameNearby } from './shared/name-detector'
 
-// Keywords que indican datos salariales/nómina
-const SALARY_KEYWORDS = [
-  // Verbos directos
-  'cobra', 'cobrar', 'cobras', 'cobraba', 'gana', 'ganar', 'ganas',
-  'le pago', 'le pagamos', 'nos paga', 'pagar', 'percibe', 'percibir',
-  // Cantidades
-  'brutos', 'bruto', 'netos', 'neto', 'brutos anuales', 'netos anuales',
-  'brutos mensuales', 'netos mensuales', 'al mes', 'al año', 'anuales',
-  'mensuales', 'quincenales',
-  // Conceptos nómina
+// Keywords específicos = alta confianza, ventana normal (150 chars por defecto)
+const STRONG_SALARY_KEYWORDS = [
   'nómina', 'nomina', 'salario', 'sueldo', 'retribución', 'retribucion',
   'remuneración', 'remuneracion', 'compensación', 'compensacion',
   'salario bruto', 'salario neto', 'sueldo bruto', 'sueldo neto',
   'IRPF', 'retención', 'retencion', 'base imponible', 'base de cotización',
   'complemento salarial', 'paga extra', 'pagas extra', 'plus de antigüedad',
   'incremento salarial', 'subida salarial', 'revisión salarial',
-  'variable', 'bonus', 'incentivo', 'incentivos', 'comisiones', 'comisión',
-  'dietas', 'gastos', 'tickets restaurante', 'ticket restaurante',
-  'coste empresa', 'coste total', 'paquete retributivo',
-  'banda salarial', 'rango salarial', 'horquilla salarial',
-  'cotización', 'seguridad social', 'cuota', 'tramo',
   'finiquito', 'liquidación', 'indemnización',
+  'coste empresa', 'coste total', 'paquete retributivo',
 ]
 
-const SALARY_PATTERN = new RegExp(
-  `\\b(${SALARY_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+// Keywords genéricos = baja confianza, ventana reducida (40 chars)
+const WEAK_SALARY_KEYWORDS = [
+  'cobra', 'cobrar', 'cobras', 'cobraba', 'gana', 'ganar', 'ganas',
+  'le pago', 'le pagamos', 'nos paga', 'pagar', 'percibe', 'percibir',
+  'brutos', 'bruto', 'netos', 'neto', 'brutos anuales', 'netos anuales',
+  'brutos mensuales', 'netos mensuales', 'al mes', 'al año', 'anuales',
+  'mensuales', 'quincenales',
+  'variable', 'bonus', 'incentivo', 'incentivos', 'comisiones', 'comisión',
+  'dietas', 'gastos', 'tickets restaurante', 'ticket restaurante',
+  'banda salarial', 'rango salarial', 'horquilla salarial',
+  'cotización', 'seguridad social', 'cuota', 'tramo',
+]
+
+const STRONG_SALARY_PATTERN = new RegExp(
+  `\\b(${STRONG_SALARY_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
   'gi'
 )
 
-export function detectSalaryData(text: string): Detection[] {
-  console.log('[SALARY DEBUG] texto recibido:', text.slice(0, 80))
+const WEAK_SALARY_PATTERN = new RegExp(
+  `\\b(${WEAK_SALARY_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  'gi'
+)
+
+function scanSalaryKeywords(text: string, pattern: RegExp, windowSize: number): Detection[] {
   const detections: Detection[] = []
   const seen = new Set<string>()
 
-  SALARY_PATTERN.lastIndex = 0
+  pattern.lastIndex = 0
   let match: RegExpExecArray | null
-  while ((match = SALARY_PATTERN.exec(text)) !== null) {
+  while ((match = pattern.exec(text)) !== null) {
     const keyword = match[0]
     const keywordStart = match.index
     const keywordEnd = keywordStart + keyword.length
 
-    const nearbyName = hasNameNearby(text, keywordStart, keywordEnd)
+    const nearbyName = hasNameNearby(text, keywordStart, keywordEnd, windowSize)
     if (!nearbyName) continue
 
     const key = `${nearbyName.name}:${keyword.toLowerCase()}`
@@ -65,4 +70,22 @@ export function detectSalaryData(text: string): Detection[] {
   }
 
   return detections
+}
+
+export function detectSalaryData(text: string): Detection[] {
+  // Pasada 1: Keywords específicos con ventana normal (150)
+  const strongDetections = scanSalaryKeywords(text, STRONG_SALARY_PATTERN, 150)
+
+  // Pasada 2: Keywords genéricos con ventana reducida (40)
+  const weakDetections = scanSalaryKeywords(text, WEAK_SALARY_PATTERN, 40)
+
+  // Combinar, evitando duplicados por position
+  const allDetections = [...strongDetections, ...weakDetections]
+  const deduped = new Map<string, Detection>()
+  for (const det of allDetections) {
+    const key = `${det.start}:${det.end}`
+    deduped.set(key, det)
+  }
+
+  return Array.from(deduped.values())
 }

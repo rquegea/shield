@@ -1,11 +1,12 @@
 // Content script — interceptor de subida de archivos
 // Detecta datos sensibles en archivos que se suben a plataformas de IA
 
-import { scanText, maskValue } from '@shieldai/detectors'
-import type { ScanResult, DetectorType } from '@shieldai/detectors'
+import { scanText, maskValue, calculateRiskLevel, calculateMaxSeverity, buildSummary } from '@shieldai/detectors'
+import type { ScanResult, Detection, DetectorType } from '@shieldai/detectors'
 import type { ExtensionConfig, EventPayload } from '../types'
 import { showWarningModal } from './ui/WarningModal'
 import JSZip from 'jszip'
+import * as pdfjsLib from 'pdfjs-dist'
 
 // ============================================================================
 // Estado global
@@ -58,62 +59,31 @@ function readFileAsText(file: File): Promise<string> {
   })
 }
 
-function extractPdfText(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const text = reader.result as string
-      // Los PDFs tienen texto entre paréntesis seguido de Tj o TJ
-      const results: string[] = []
+async function extractPdfText(file: File): Promise<string> {
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.mjs')
 
-      // Buscar texto en operadores Tj
-      const regex1 = /\(([^)]{1,500})\)\s*Tj/g
-      let match
-      while ((match = regex1.exec(text)) !== null) {
-        results.push(match[1])
-      }
+    const arrayBuffer = await file.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      isEvalSupported: false,
+      useSystemFonts: true,
+    }).promise
+    const texts: string[] = []
 
-      // Buscar texto en arrays TJ
-      const regex2 = /\[([^\]]*)\]\s*TJ/gi
-      while ((match = regex2.exec(text)) !== null) {
-        const innerStrings = match[1].match(/\(([^)]+)\)/g)
-        if (innerStrings) {
-          for (const s of innerStrings) {
-            results.push(s.slice(1, -1))
-          }
-        }
-      }
-
-      // También buscar texto plano después de "stream" y antes de "endstream"
-      // Algunos PDFs tienen texto sin comprimir en streams
-      const streamRegex = /stream\r?\n([\s\S]*?)endstream/g
-      while ((match = streamRegex.exec(text)) !== null) {
-        const streamText = match[1]
-        // Extraer texto de operadores BT...ET
-        const btRegex = /BT\s([\s\S]*?)ET/g
-        let btMatch
-        while ((btMatch = btRegex.exec(streamText)) !== null) {
-          const innerText = btMatch[1]
-          const tjInner = innerText.match(/\(([^)]+)\)/g)
-          if (tjInner) {
-            for (const s of tjInner) {
-              results.push(s.slice(1, -1))
-            }
-          }
-        }
-      }
-
-      const extracted = results.join(' ')
-      console.log('[Guripa AI] PDF texto extraído:', extracted.length, 'caracteres')
-      console.log('[Guripa AI] PDF muestra:', extracted.substring(0, 300))
-      resolve(extracted)
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const content = await page.getTextContent()
+      texts.push(content.items.map((item: unknown) => (item as { str: string }).str).join(' '))
     }
-    reader.onerror = () => {
-      console.warn('[Guripa AI] Error leyendo PDF')
-      resolve('')
-    }
-    reader.readAsBinaryString(file)
-  })
+
+    const extracted = texts.join('\n')
+    console.log('[Guripa AI] PDF texto extraído (pdf.js):', extracted.length, 'caracteres')
+    return extracted
+  } catch (err) {
+    console.warn('[Guripa AI] PDF.js falló:', err)
+    return ''
+  }
 }
 
 async function readDocxAsText(file: File): Promise<string> {
@@ -205,6 +175,254 @@ function buildPayload(
 }
 
 // ============================================================================
+// Selectores de dismiss para archivos adjuntados por plataforma
+// ============================================================================
+
+const FILE_DISMISS_SELECTORS: Record<string, string[]> = {
+  chatgpt: [
+    'button[aria-label="Remove file"]',
+    'button[aria-label="Eliminar archivo"]',
+    'button[aria-label="Remove attachment"]',
+    '[class*="attachment"] button[class*="close"]',
+    '[class*="attachment"] button[class*="remove"]',
+    '[class*="file"] button[class*="close"]',
+    '[class*="file"] button[class*="remove"]',
+    '[data-testid*="file"] button',
+    '[data-testid*="attachment"] button',
+  ],
+  gemini: [
+    'button[aria-label="Remove file"]',
+    'button[aria-label="Quitar archivo"]',
+    'button[aria-label="Remove"]',
+    '.file-chip button[aria-label="Remove"]',
+    '[class*="chip"] button[class*="close"]',
+    '[class*="chip"] button[class*="remove"]',
+    '[class*="attachment"] button[class*="cancel"]',
+    '.upload-chip .close-button',
+    '[class*="upload"] button[class*="remove"]',
+  ],
+  claude: [
+    'button[aria-label="Remove file"]',
+    'button[aria-label="Eliminar archivo"]',
+    'button[aria-label="Remove attachment"]',
+    '[class*="attachment"] button',
+    '[class*="file-pill"] button',
+    '[class*="uploaded-file"] button[class*="remove"]',
+    '[class*="uploaded-file"] button[class*="close"]',
+    '.composer-attachment-list button[class*="dismiss"]',
+    '.composer-attachment-list button[class*="remove"]',
+  ],
+  perplexity: [
+    'button[aria-label="Remove file"]',
+    'button[aria-label="Remove"]',
+    '[class*="attachment"] button[class*="close"]',
+    '[class*="attachment"] button[class*="remove"]',
+    '[class*="file"] button[class*="close"]',
+    '[class*="file"] button[class*="remove"]',
+  ],
+  copilot: [
+    'button[aria-label="Remove file"]',
+    'button[aria-label="Remove attachment"]',
+    '[class*="attachment"] button[class*="close"]',
+    '[class*="attachment"] button[class*="remove"]',
+    '[class*="file"] button',
+  ],
+}
+
+// ============================================================================
+// Descartar archivo adjuntado de la UI de la plataforma
+// ============================================================================
+
+function getDismissSelectors(): string[] {
+  // Primero intentar selectores dinámicos del config
+  const dynamic = config?.fileDismissSelectors
+  if (dynamic && dynamic.length > 0) {
+    console.log('[Guripa AI] Usando selectores dinámicos de dismiss')
+    return dynamic
+  }
+
+  // Fallback a hardcodeados
+  const hardcoded = FILE_DISMISS_SELECTORS[platform] ?? []
+  if (hardcoded.length > 0) {
+    console.log(`[Guripa AI] Usando selectores hardcodeados de dismiss para ${platform}`)
+  }
+  return hardcoded
+}
+
+// ============================================================================
+// Estrategia hover-then-dismiss para Claude.ai y Perplexity
+// ============================================================================
+
+async function hoverAndDismissFileChip(filename?: string): Promise<boolean> {
+  console.log(`[Guripa AI] 🎯 Intentando estrategia hover-then-dismiss para ${platform}...`)
+
+  // Buscar chips: div con clase que contenga "pill", "chip", "attachment", etc.
+  // O buscar específicamente por atributos que indiquen un file attachment
+  const potentialChips = Array.from(document.querySelectorAll('*')).filter(el => {
+    const classStr = el.className.toString().toLowerCase()
+    const hasFileClass = classStr.includes('pill') ||
+                         classStr.includes('chip') ||
+                         classStr.includes('attachment') ||
+                         classStr.includes('upload') ||
+                         classStr.includes('file') ||
+                         classStr.includes('badge')
+
+    if (!hasFileClass) return false
+
+    // Filtrar por ubicación: zona baja de pantalla (composer area)
+    const rect = (el as HTMLElement).getBoundingClientRect()
+    const lowerThreshold = window.innerHeight - 400
+    return rect.bottom > lowerThreshold && rect.width > 0 && rect.height > 0
+  }) as HTMLElement[]
+
+  console.log(`[Guripa AI] Encontrados ${potentialChips.length} chips potenciales`)
+
+  if (potentialChips.length === 0) {
+    console.log('[Guripa AI] ⚠️ No se encontró chip de archivo para hover')
+    return false
+  }
+
+  // Usar el último chip encontrado (más probable que sea el recién añadido)
+  const chipElement = potentialChips[potentialChips.length - 1]
+  console.log('[Guripa AI] Usando chip:', chipElement.className, 'Contenido:', chipElement.textContent?.slice(0, 50))
+
+  try {
+    // Disparar mouseenter y mouseover para que React renderice el botón X
+    console.log('[Guripa AI] 🖱️ Disparando mouseenter y mouseover...')
+    const mouseEnterEvent = new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window })
+    const mouseOverEvent = new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })
+
+    chipElement.dispatchEvent(mouseEnterEvent)
+    chipElement.dispatchEvent(mouseOverEvent)
+
+    // Esperar a que React renderice el botón
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    console.log('[Guripa AI] 🔍 Buscando botón X después del hover...')
+
+    // Estrategia 1: Buscar botones dentro del chip
+    const buttonsInChip = Array.from(chipElement.querySelectorAll('button'))
+    console.log(`[Guripa AI] Botones dentro del chip: ${buttonsInChip.length}`)
+
+    for (const btn of buttonsInChip) {
+      const rect = btn.getBoundingClientRect()
+      const ariaLabel = btn.getAttribute('aria-label') || ''
+      const title = btn.getAttribute('title') || ''
+      const classStr = btn.className.toString().toLowerCase()
+
+      console.log(`[Guripa AI] Botón: size=${rect.width}x${rect.height}, aria-label="${ariaLabel}", class="${classStr}"`)
+
+      // Cualquier botón pequeño dentro del chip podría ser el X
+      if (rect.width < 40 && rect.height < 40) {
+        console.log('[Guripa AI] ✓ Clickeando botón pequeño dentro del chip')
+        btn.click()
+        console.log('[Guripa AI] 🗑️ Archivo descartado (hover-then-dismiss)')
+        return true
+      }
+    }
+
+    // Estrategia 2: Buscar SVG (el X puede ser un SVG puro sin button)
+    const svgsInChip = Array.from(chipElement.querySelectorAll('svg'))
+    console.log(`[Guripa AI] SVGs dentro del chip: ${svgsInChip.length}`)
+
+    for (const svg of svgsInChip) {
+      const parent = svg.closest('button') || svg.parentElement
+      if (parent && parent.tagName !== 'SVG') {
+        console.log('[Guripa AI] ✓ Clickeando elemento padre del SVG')
+        ;(parent as HTMLElement).click()
+        console.log('[Guripa AI] 🗑️ Archivo descartado (hover-then-dismiss SVG)')
+        return true
+      }
+    }
+
+    // Estrategia 3: Buscar en hermanos del chip (a veces el botón X está fuera)
+    console.log('[Guripa AI] Buscando botones en hermanos del chip...')
+    const parent = chipElement.parentElement
+    if (parent) {
+      const siblingButtons = Array.from(parent.querySelectorAll('button'))
+      for (const btn of siblingButtons) {
+        const rect = btn.getBoundingClientRect()
+        if (rect.width < 40 && rect.height < 40) {
+          console.log('[Guripa AI] ✓ Clickeando botón pequeño hermano')
+          btn.click()
+          console.log('[Guripa AI] 🗑️ Archivo descartado (hover-then-dismiss sibling)')
+          return true
+        }
+      }
+    }
+
+    console.log('[Guripa AI] ⚠️ No se encontró botón X después del hover')
+    return false
+  } catch (e) {
+    console.warn('[Guripa AI] Error en estrategia hover-then-dismiss:', e)
+    return false
+  }
+}
+
+// ============================================================================
+// Descartar archivo adjuntado de la UI de la plataforma
+// ============================================================================
+
+async function dismissFileAttachments(filename?: string): Promise<boolean> {
+  console.log(`[Guripa AI] 🗑️ Intentando descartar archivo${filename ? ` (${filename})` : ''}...`)
+
+  const selectors = getDismissSelectors()
+
+  // Estrategia 1: Intentar selectores directos (ChatGPT, Gemini, Copilot, etc.)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) {
+      await new Promise(resolve => setTimeout(resolve, 200 + attempt * 100))
+    }
+
+    for (const selector of selectors) {
+      const buttons = document.querySelectorAll(selector)
+      if (buttons.length > 0) {
+        const btn = buttons[buttons.length - 1] as HTMLElement
+        try {
+          btn.click()
+          console.log(`[Guripa AI] 🗑️ Archivo descartado de la UI de ${platform}`)
+          return true
+        } catch (e) {
+          console.warn('[Guripa AI] Error al hacer click en dismiss button:', e)
+        }
+      }
+    }
+
+    // Fallback genérico: buscar botones con aria-label que contenga palabras clave
+    if (attempt === 4) {
+      const allButtons = Array.from(document.querySelectorAll('button'))
+      for (const btn of allButtons) {
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase()
+        const title = (btn.getAttribute('title') || '').toLowerCase()
+
+        if (label.includes('remove') || label.includes('delete') || label.includes('dismiss') ||
+            label.includes('eliminar') || label.includes('descartar') ||
+            title.includes('remove') || title.includes('delete') || title.includes('dismiss')) {
+          try {
+            btn.click()
+            console.log('[Guripa AI] 🗑️ Archivo descartado (fallback genérico)')
+            return true
+          } catch (e) {
+            // Continuar
+          }
+        }
+      }
+    }
+  }
+
+  // Estrategia 2: Hover-then-dismiss para Claude.ai y Perplexity (plataformas que renderizan botones en hover)
+  if (platform === 'claude' || platform === 'perplexity') {
+    const hoverResult = await hoverAndDismissFileChip(filename)
+    if (hoverResult) {
+      return true
+    }
+  }
+
+  console.log('[Guripa AI] ⚠️ No se encontró forma de descartar el archivo')
+  return false
+}
+
+// ============================================================================
 // Escaneo de archivos
 // ============================================================================
 
@@ -269,6 +487,24 @@ async function checkFileForSensitiveData(file: File): Promise<FileCheckResult> {
   } catch (err) {
     console.warn('[Guripa AI] Error procesando archivo:', err)
     return { shouldBlock: false, scanResult: null }
+  }
+}
+
+// ============================================================================
+// Combinar resultados de múltiples archivos
+// ============================================================================
+
+function mergeScanResults(results: ScanResult[]): ScanResult {
+  const allDetections: Detection[] = []
+  for (const r of results) {
+    allDetections.push(...r.detections)
+  }
+  return {
+    hasMatches: allDetections.length > 0,
+    detections: allDetections,
+    riskLevel: calculateRiskLevel(allDetections),
+    maxSeverity: calculateMaxSeverity(allDetections),
+    summary: buildSummary(allDetections),
   }
 }
 
@@ -410,15 +646,32 @@ async function handleFileInputChange(event: Event): Promise<void> {
   const files = event.target.files
   if (!files || files.length === 0) return
 
-  const file = files[0]
-  const fileExt = file.name.split('.').pop() || 'unknown'
+  console.log(`[Guripa AI] 📁 ${files.length} archivo(s) seleccionado(s)`)
 
-  console.log(`[Guripa AI] 📁 Archivo seleccionado: ${file.name}`)
+  // Analizar TODOS los archivos
+  const scanResults: ScanResult[] = []
+  const binaryFiles: string[] = []
+  const fileNames: string[] = []
 
-  const checkResult = await checkFileForSensitiveData(file)
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    fileNames.push(file.name)
+    console.log(`[Guripa AI] 📁 Analizando archivo ${i + 1}/${files.length}: ${file.name}`)
 
-  if (!checkResult.shouldBlock) {
-    console.log('[Guripa AI] ✅ Archivo permitido, no hay detecciones')
+    const checkResult = await checkFileForSensitiveData(file)
+
+    if (checkResult.shouldBlock) {
+      if (checkResult.scanResult === null) {
+        binaryFiles.push(file.name)
+      } else {
+        scanResults.push(checkResult.scanResult)
+      }
+    }
+  }
+
+  // Si no hay nada que bloquear, permitir
+  if (scanResults.length === 0 && binaryFiles.length === 0) {
+    console.log('[Guripa AI] ✅ Todos los archivos permitidos, no hay detecciones')
     return
   }
 
@@ -428,31 +681,51 @@ async function handleFileInputChange(event: Event): Promise<void> {
   event.stopImmediatePropagation()
 
   let userAccepted = false
+  const allFileNames = fileNames.join(', ')
+  const firstExt = fileNames[0].split('.').pop() || 'unknown'
 
-  if (checkResult.scanResult === null) {
-    console.log('[Guripa AI] ⚠️ Warning genérico para archivo binario')
-    userAccepted = await showFileWarningModalGeneric(file.name, fileExt)
-  } else {
-    console.log(`[Guripa AI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
+  if (scanResults.length > 0) {
+    // Combinar todas las detecciones de todos los archivos
+    const merged = mergeScanResults(scanResults)
+    console.log(`[Guripa AI] 🚨 Detecciones encontradas en archivos: ${merged.summary}`)
+    const label = fileNames.length === 1 ? `Archivo: ${fileNames[0]}` : `${fileNames.length} archivos: ${allFileNames}`
     const response = await showWarningModal(
-      checkResult.scanResult.detections,
-      checkResult.scanResult.riskLevel,
-      `Archivo: ${file.name}`,
+      merged.detections,
+      merged.riskLevel,
+      label,
       platform,
     )
     userAccepted = response === 'accept'
+
+    // Si el usuario descartó el archivo, descartar de la UI
+    if (!userAccepted) {
+      await dismissFileAttachments(fileNames[0])
+    }
+
+    const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
+    sendEvent(buildPayload(merged, action, userAccepted, allFileNames, firstExt))
+  } else {
+    // Solo archivos binarios no parseables
+    console.log('[Guripa AI] ⚠️ Warning genérico para archivo(s) binario(s)')
+    const label = binaryFiles.length === 1 ? binaryFiles[0] : binaryFiles.join(', ')
+    userAccepted = await showFileWarningModalGeneric(label, firstExt)
+
+    // Si el usuario descartó el archivo, descartar de la UI
+    if (!userAccepted) {
+      await dismissFileAttachments(binaryFiles[0])
+    }
+
+    const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
+    sendEvent(buildPayload(null, action, userAccepted, allFileNames, firstExt))
   }
 
   // Limpiar input
   event.target.value = ''
 
-  // Registrar evento
-  const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
-  sendEvent(buildPayload(checkResult.scanResult, action, userAccepted, file.name, fileExt))
-
   if (userAccepted) {
-    console.log('[Guripa AI] Usuario aceptó subir el archivo')
-    // El usuario tendrá que re-seleccionar el archivo
+    console.log('[Guripa AI] ✅ Usuario aceptó subir los archivos')
+  } else {
+    console.log('[Guripa AI] ❌ Usuario descartó los archivos')
   }
 }
 
@@ -465,16 +738,33 @@ async function handleDropEvent(event: DragEvent): Promise<void> {
   const target = event.target
   if (!(target instanceof HTMLElement)) return
 
-  console.log(`[Guripa AI] 📂 Drop detectado con ${event.dataTransfer.files.length} archivo(s)`)
+  const files = event.dataTransfer.files
+  console.log(`[Guripa AI] 📂 Drop detectado con ${files.length} archivo(s)`)
 
-  // Procesar solo el primer archivo
-  const file = event.dataTransfer.files[0]
-  const fileExt = file.name.split('.').pop() || 'unknown'
+  // Analizar TODOS los archivos
+  const scanResults: ScanResult[] = []
+  const binaryFiles: string[] = []
+  const fileNames: string[] = []
 
-  const checkResult = await checkFileForSensitiveData(file)
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    fileNames.push(file.name)
+    console.log(`[Guripa AI] 📂 Analizando archivo ${i + 1}/${files.length}: ${file.name}`)
 
-  if (!checkResult.shouldBlock) {
-    console.log('[Guripa AI] ✅ Archivo permitido, no hay detecciones')
+    const checkResult = await checkFileForSensitiveData(file)
+
+    if (checkResult.shouldBlock) {
+      if (checkResult.scanResult === null) {
+        binaryFiles.push(file.name)
+      } else {
+        scanResults.push(checkResult.scanResult)
+      }
+    }
+  }
+
+  // Si no hay nada que bloquear, permitir
+  if (scanResults.length === 0 && binaryFiles.length === 0) {
+    console.log('[Guripa AI] ✅ Todos los archivos permitidos, no hay detecciones')
     return
   }
 
@@ -484,24 +774,47 @@ async function handleDropEvent(event: DragEvent): Promise<void> {
   event.stopImmediatePropagation()
 
   let userAccepted = false
+  const allFileNames = fileNames.join(', ')
+  const firstExt = fileNames[0].split('.').pop() || 'unknown'
 
-  if (checkResult.scanResult === null) {
-    console.log('[Guripa AI] ⚠️ Warning genérico para archivo binario')
-    userAccepted = await showFileWarningModalGeneric(file.name, fileExt)
-  } else {
-    console.log(`[Guripa AI] 🚨 Detecciones encontradas: ${checkResult.scanResult.summary}`)
+  if (scanResults.length > 0) {
+    const merged = mergeScanResults(scanResults)
+    console.log(`[Guripa AI] 🚨 Detecciones encontradas en archivos: ${merged.summary}`)
+    const label = fileNames.length === 1 ? `Archivo: ${fileNames[0]}` : `${fileNames.length} archivos: ${allFileNames}`
     const response = await showWarningModal(
-      checkResult.scanResult.detections,
-      checkResult.scanResult.riskLevel,
-      `Archivo: ${file.name}`,
+      merged.detections,
+      merged.riskLevel,
+      label,
       platform,
     )
     userAccepted = response === 'accept'
+
+    // Si el usuario descartó el archivo, descartar de la UI
+    if (!userAccepted) {
+      await dismissFileAttachments(fileNames[0])
+    }
+
+    const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
+    sendEvent(buildPayload(merged, action, userAccepted, allFileNames, firstExt))
+  } else {
+    console.log('[Guripa AI] ⚠️ Warning genérico para archivo(s) binario(s)')
+    const label = binaryFiles.length === 1 ? binaryFiles[0] : binaryFiles.join(', ')
+    userAccepted = await showFileWarningModalGeneric(label, firstExt)
+
+    // Si el usuario descartó el archivo, descartar de la UI
+    if (!userAccepted) {
+      await dismissFileAttachments(binaryFiles[0])
+    }
+
+    const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
+    sendEvent(buildPayload(null, action, userAccepted, allFileNames, firstExt))
   }
 
-  // Registrar evento
-  const action = userAccepted ? 'warned_sent' : 'warned_cancelled'
-  sendEvent(buildPayload(checkResult.scanResult, action, userAccepted, file.name, fileExt))
+  if (userAccepted) {
+    console.log('[Guripa AI] ✅ Usuario aceptó los archivos drag-drop')
+  } else {
+    console.log('[Guripa AI] ❌ Usuario descartó los archivos drag-drop')
+  }
 }
 
 // ============================================================================

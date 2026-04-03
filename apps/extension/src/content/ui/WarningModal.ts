@@ -1,26 +1,15 @@
 // WarningModal — se renderiza en Shadow DOM para aislar estilos de la página host
-// Devuelve Promise<'cancel' | 'accept'> que el interceptor espera
+// Diseño: tarjeta flotante con colores dinámicos por categoría, sin overlay oscuro,
+// detecciones agrupadas por categoría con campos tipo input readonly
 
 import type { Detection } from '@shieldai/detectors'
-
-// --- Nombres legibles de plataformas ---
-
-const PLATFORM_NAMES: Record<string, string> = {
-  chatgpt: 'ChatGPT',
-  gemini: 'Google Gemini',
-  claude: 'Claude',
-  perplexity: 'Perplexity',
-  copilot: 'Microsoft Copilot',
-}
-
-// --- Etiquetas y colores de riesgo ---
-
-const RISK_CONFIG: Record<string, { label: string; bg: string; color: string; border: string }> = {
-  critical: { label: 'Riesgo Crítico', bg: '#fef2f2', color: '#991b1b', border: '#fecaca' },
-  high:     { label: 'Riesgo Alto',    bg: '#fff7ed', color: '#9a3412', border: '#fed7aa' },
-  medium:   { label: 'Riesgo Medio',   bg: '#fffbeb', color: '#92400e', border: '#fde68a' },
-  low:      { label: 'Riesgo Bajo',    bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
-}
+import {
+  getPrimaryTheme,
+  getThemeForCategory,
+  groupByCategory,
+  shieldSvgLarge,
+  DETECTION_LABELS,
+} from './categoryTheme'
 
 // --- Estilos del modal (dentro del Shadow DOM) ---
 
@@ -33,9 +22,10 @@ const MODAL_STYLES = /* css */ `
     width: 100%;
     height: 100%;
     z-index: 2147483647;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    color: #111827;
+    font-family: 'Helvetica Neue', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #1a1a2e;
     line-height: 1.5;
+    pointer-events: none;
   }
   *, *::before, *::after {
     box-sizing: border-box;
@@ -43,50 +33,59 @@ const MODAL_STYLES = /* css */ `
     padding: 0;
   }
 
-  /* --- Overlay --- */
-  .overlay {
+  /* --- Backdrop oscuro que bloquea la página --- */
+  .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    animation: fadeIn 0.15s ease-out;
+    pointer-events: auto;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(3px);
+    animation: fadeIn 0.2s ease-out;
   }
   @keyframes fadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }
   }
 
-  /* --- Tarjeta del modal --- */
-  .modal {
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 28px;
-    max-width: 500px;
-    width: 100%;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    animation: slideUp 0.2s ease-out;
+  /* --- Tarjeta flotante --- */
+  .card {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    border-radius: 20px;
+    padding: 24px;
+    max-width: 420px;
+    width: calc(100% - 48px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.05);
+    animation: slideUpIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1;
   }
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
+  @keyframes slideUpIn {
+    from { opacity: 0; transform: translate(-50%, calc(-50% + 16px)); }
+    to   { opacity: 1; transform: translate(-50%, -50%); }
+  }
+  @keyframes slideDownOut {
+    from { opacity: 1; transform: translate(-50%, -50%); }
+    to   { opacity: 0; transform: translate(-50%, calc(-50% + 16px)); }
+  }
+  .card.removing {
+    animation: slideDownOut 0.15s ease-in forwards;
   }
 
-  /* --- Header con icono --- */
+
+  /* --- Header --- */
   .header {
     display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    margin-bottom: 20px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
   }
   .shield-icon {
     width: 44px;
     height: 44px;
-    background: #fef2f2;
-    border-radius: 12px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -98,138 +97,144 @@ const MODAL_STYLES = /* css */ `
   }
   .header-text {
     flex: 1;
+    min-width: 0;
   }
   .title {
-    font-size: 17px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 4px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.3;
   }
-  .description {
+  .subtitle {
     font-size: 13px;
-    color: #6b7280;
-  }
-
-  /* --- Badge de riesgo --- */
-  .risk-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    margin-bottom: 16px;
-  }
-  .risk-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-
-  /* --- Lista de detecciones --- */
-  .detections {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 4px 0;
-    margin-bottom: 16px;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-  .detection-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    border-bottom: 1px solid #f3f4f6;
-  }
-  .detection-item:last-child {
-    border-bottom: none;
-  }
-  .detection-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .detection-icon {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ef4444;
-    flex-shrink: 0;
-  }
-  .detection-type {
-    font-size: 13px;
+    color: #8C7A6B;
     font-weight: 500;
-    color: #374151;
-  }
-  .detection-value {
-    font-size: 13px;
-    color: #9ca3af;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
   }
 
-  /* --- Texto de advertencia --- */
-  .warning-text {
-    font-size: 13px;
-    color: #6b7280;
-    margin-bottom: 24px;
-    line-height: 1.6;
-    padding: 12px 14px;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-radius: 8px;
+  /* --- Grupo de categoría --- */
+  .category-group {
+    margin-bottom: 14px;
   }
-  .warning-text strong {
-    color: #92400e;
+  .category-group:last-of-type {
+    margin-bottom: 18px;
+  }
+  .category-title {
+    font-size: 11px;
     font-weight: 600;
+    color: #8C7A6B;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    padding-left: 2px;
   }
 
-  /* --- Botones --- */
-  .buttons {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
+  /* --- Detección individual --- */
+  .det-item {
+    margin-bottom: 8px;
   }
-  .btn {
-    padding: 10px 20px;
+  .det-item:last-child {
+    margin-bottom: 0;
+  }
+  .det-value {
+    width: 100%;
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 10px;
     font-size: 14px;
     font-weight: 500;
+    color: #1a1a2e;
+    font-family: inherit;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .det-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 4px;
+    font-size: 11px;
+    color: #8C7A6B;
+    font-weight: 500;
+  }
+  .det-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* --- Botones de acción --- */
+  .actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .btn-discard {
+    padding: 9px 22px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    border: none;
-    transition: all 0.15s ease;
-    outline: none;
+    background: transparent;
+    color: #8C7A6B;
+    border: 1.5px solid rgba(140, 122, 107, 0.3);
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+    line-height: 1.4;
   }
-  .btn:focus-visible {
-    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #3b82f6;
+  .btn-discard:hover {
+    background: rgba(140, 122, 107, 0.08);
+    border-color: rgba(140, 122, 107, 0.5);
   }
-  .btn-cancel {
-    background: #f3f4f6;
-    color: #374151;
-    border: 1px solid #e5e7eb;
-  }
-  .btn-cancel:hover {
-    background: #e5e7eb;
+  .btn-discard:focus-visible {
+    outline: 2px solid #8C7A6B;
+    outline-offset: 2px;
   }
   .btn-accept {
-    background: #dc2626;
-    color: #ffffff;
+    padding: 9px 22px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: inherit;
+    line-height: 1.4;
   }
-  .btn-accept:hover {
-    background: #b91c1c;
+  .btn-accept:focus-visible {
+    outline-offset: 2px;
+  }
+
+  /* --- Scroll para muchas detecciones --- */
+  .detections-scroll {
+    max-height: 300px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.12) transparent;
+  }
+  .detections-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .detections-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.12);
+    border-radius: 4px;
+  }
+
+  @media (max-width: 480px) {
+    .card {
+      max-width: none;
+      width: calc(100% - 32px);
+      padding: 20px;
+    }
   }
 `
-
-// --- SVG del icono de escudo/warning ---
-
-const SHIELD_WARNING_SVG = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
-  <path d="M12 9v4M12 16h.01" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
-</svg>`
 
 // --- Escapar HTML para prevenir XSS ---
 
@@ -258,91 +263,115 @@ export function showWarningModal(
     styleEl.textContent = MODAL_STYLES
     shadow.appendChild(styleEl)
 
-    // Datos de riesgo
-    const risk = RISK_CONFIG[riskLevel] ?? RISK_CONFIG.medium
-    const platformName = platformId ? (PLATFORM_NAMES[platformId] ?? platformId) : 'la plataforma de IA'
+    // Tema dinámico según la categoría principal
+    const theme = getPrimaryTheme(detections)
+    const totalCount = detections.length
 
-    // Construir HTML
-    const overlay = document.createElement('div')
-    overlay.className = 'overlay'
-    overlay.innerHTML = `
-      <div class="modal" role="alertdialog" aria-labelledby="shieldai-title" aria-describedby="shieldai-desc">
-        <div class="header">
-          <div class="shield-icon">${SHIELD_WARNING_SVG}</div>
-          <div class="header-text">
-            <div class="title" id="shieldai-title">Datos sensibles detectados</div>
-            <div class="description" id="shieldai-desc">
-              Se han detectado los siguientes datos sensibles en tu mensaje:
+    // Agrupar por categoría
+    const groups = groupByCategory(detections)
+
+    // Construir detecciones HTML agrupadas
+    let detectionsHtml = ''
+    for (const [category, dets] of groups) {
+      const catTheme = getThemeForCategory(category)
+      detectionsHtml += `<div class="category-group">`
+      if (groups.size > 1) {
+        detectionsHtml += `<div class="category-title">${escapeHtml(catTheme.label)}</div>`
+      }
+      for (const d of dets) {
+        const typeLabel = DETECTION_LABELS[d.type] ?? d.type
+        detectionsHtml += `
+          <div class="det-item">
+            <div class="det-value">${escapeHtml(d.masked)}</div>
+            <div class="det-label">
+              <span class="det-dot" style="background:${catTheme.dotColor}"></span>
+              ${escapeHtml(catTheme.label)} &middot; ${escapeHtml(typeLabel)}
             </div>
-          </div>
-        </div>
+          </div>`
+      }
+      detectionsHtml += `</div>`
+    }
 
-        <div class="risk-badge" style="background:${risk.bg};color:${risk.color};border:1px solid ${risk.border}">
-          <span class="risk-dot" style="background:${risk.color}"></span>
-          ${escapeHtml(risk.label)}
-        </div>
+    // Construir el card
+    const backdrop = document.createElement('div')
+    backdrop.className = 'backdrop'
 
-        <div class="detections">
-          ${detections.map((d) => `
-            <div class="detection-item">
-              <div class="detection-label">
-                <span class="detection-icon"></span>
-                <span class="detection-type">${escapeHtml(d.type)}</span>
-              </div>
-              <span class="detection-value">${escapeHtml(d.masked)}</span>
-            </div>
-          `).join('')}
-        </div>
-
-        <div class="warning-text">
-          Enviar estos datos a <strong>${escapeHtml(platformName)}</strong> puede incumplir
-          la política de protección de datos de tu empresa.
-          Tu decisión quedará registrada.
-        </div>
-
-        <div class="buttons">
-          <button class="btn btn-cancel" id="shieldai-cancel">Cancelar envío</button>
-          <button class="btn btn-accept" id="shieldai-accept">Acepto el riesgo y envío</button>
+    const card = document.createElement('div')
+    card.className = 'card'
+    card.style.background = theme.bg
+    card.setAttribute('role', 'alertdialog')
+    card.setAttribute('aria-labelledby', 'shieldai-title')
+    card.innerHTML = `
+      <div class="header">
+        <div class="shield-icon" style="background:${theme.iconBg}">${shieldSvgLarge(theme.iconBg, theme.iconColor)}</div>
+        <div class="header-text">
+          <div class="title" id="shieldai-title">${escapeHtml(theme.label)}</div>
+          <div class="subtitle">${totalCount} dato${totalCount !== 1 ? 's' : ''} detectado${totalCount !== 1 ? 's' : ''}</div>
         </div>
       </div>
+      <div class="detections-scroll">
+        ${detectionsHtml}
+      </div>
+      <div class="actions">
+        <button class="btn-discard" id="shieldai-discard">Descartar archivo</button>
+        <button class="btn-accept" id="shieldai-accept" style="color:${theme.btnColor};border:1.5px solid ${theme.btnBorder}">Enviar de todos modos</button>
+      </div>
     `
-    shadow.appendChild(overlay)
+
+    shadow.appendChild(backdrop)
+    shadow.appendChild(card)
+
+    // Hover dinámico para el botón
+    const acceptBtn = shadow.getElementById('shieldai-accept') as HTMLElement
+    acceptBtn.addEventListener('mouseenter', () => {
+      acceptBtn.style.background = theme.btnHoverBg
+    })
+    acceptBtn.addEventListener('mouseleave', () => {
+      acceptBtn.style.background = 'transparent'
+    })
 
     // --- Cierre y resolución ---
 
     let resolved = false
 
+    // --- Bloquear TODOS los eventos de teclado e input mientras el modal está abierto ---
+    function blockKeyboardEvent(e: KeyboardEvent): void {
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+    }
+    function blockInputEvent(e: Event): void {
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+    }
+    document.addEventListener('keydown', blockKeyboardEvent, { capture: true })
+    document.addEventListener('keyup', blockKeyboardEvent, { capture: true })
+    document.addEventListener('keypress', blockKeyboardEvent, { capture: true })
+    document.addEventListener('input', blockInputEvent, { capture: true })
+    document.addEventListener('paste', blockInputEvent, { capture: true })
+    document.addEventListener('compositionstart', blockInputEvent, { capture: true })
+    document.addEventListener('compositionend', blockInputEvent, { capture: true })
+
     function cleanup(result: 'cancel' | 'accept'): void {
       if (resolved) return
       resolved = true
-      host.remove()
+      // Remover bloqueadores de teclado e input
+      document.removeEventListener('keydown', blockKeyboardEvent, { capture: true })
+      document.removeEventListener('keyup', blockKeyboardEvent, { capture: true })
+      document.removeEventListener('keypress', blockKeyboardEvent, { capture: true })
+      document.removeEventListener('input', blockInputEvent, { capture: true })
+      document.removeEventListener('paste', blockInputEvent, { capture: true })
+      document.removeEventListener('compositionstart', blockInputEvent, { capture: true })
+      document.removeEventListener('compositionend', blockInputEvent, { capture: true })
+      card.classList.add('removing')
+      setTimeout(() => host.remove(), 150)
       resolve(result)
     }
 
     // Botones
-    shadow.getElementById('shieldai-cancel')!.addEventListener('click', () => cleanup('cancel'))
-    shadow.getElementById('shieldai-accept')!.addEventListener('click', () => cleanup('accept'))
-
-    // Click fuera del modal = cancelar
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) cleanup('cancel')
-    })
-
-    // Escape = cancelar
-    function onKeydown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        cleanup('cancel')
-        document.removeEventListener('keydown', onKeydown, { capture: true })
-      }
-    }
-    document.addEventListener('keydown', onKeydown, { capture: true })
-
-    // Focus en el botón de cancelar para accesibilidad
-    const cancelBtn = shadow.getElementById('shieldai-cancel')
-    if (cancelBtn) {
-      requestAnimationFrame(() => cancelBtn.focus())
-    }
+    const discardBtn = shadow.getElementById('shieldai-discard') as HTMLElement
+    acceptBtn.addEventListener('click', () => cleanup('accept'))
+    discardBtn.addEventListener('click', () => cleanup('cancel'))
   })
 }
